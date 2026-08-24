@@ -1,0 +1,474 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A1B2C3D60000000000000001 /* WorldIntelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000001 /* WorldIntelApp.swift */; };
+		A1B2C3D60000000000000002 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000002 /* Models.swift */; };
+		A1B2C3D60000000000000003 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000003 /* APIClient.swift */; };
+		A1B2C3D60000000000000004 /* RSSParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000004 /* RSSParser.swift */; };
+		A1B2C3D60000000000000005 /* CacheStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000005 /* CacheStore.swift */; };
+		A1B2C3D60000000000000006 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000006 /* Components.swift */; };
+		A1B2C3D60000000000000007 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000007 /* FeedView.swift */; };
+		A1B2C3D60000000000000008 /* MapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000008 /* MapView.swift */; };
+		A1B2C3D60000000000000009 /* DisastersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000009 /* DisastersView.swift */; };
+		A1B2C3D6000000000000000A /* SupplyChainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D5000000000000000A /* SupplyChainView.swift */; };
+		A1B2C3D6000000000000000B /* MarketsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D5000000000000000B /* MarketsView.swift */; };
+		A1B2C3D6000000000000000C /* WatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D5000000000000000C /* WatchView.swift */; };
+		A1B2C3D6000000000000000D /* WebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D5000000000000000D /* WebView.swift */; };
+		A1B2C3D6000000000000000E /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D5000000000000000E /* SettingsView.swift */; };
+		A1B2C3D6000000000000000F /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D5000000000000000F /* SearchView.swift */; };
+		A1B2C3D60000000000000010 /* AIEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000010 /* AIEngine.swift */; };
+		A1B2C3D60000000000000011 /* BriefingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000011 /* BriefingView.swift */; };
+		A1B2C3D60000000000000012 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000012 /* NotificationManager.swift */; };
+		A1B2C3D60000000000000013 /* BackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000013 /* BackgroundRefresh.swift */; };
+		B1C2D3E40000000000000001 /* WorldIntelWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E50000000000000001 /* WorldIntelWidget.swift */; };
+		B1C2D3E40000000000000002 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000002 /* Models.swift */; };
+		B1C2D3E40000000000000003 /* RSSParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000004 /* RSSParser.swift */; };
+		B1C2D3E40000000000000009 /* WorldIntelWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = B1C2D3E50000000000000002 /* WorldIntelWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B1C2D3E4000000000000000A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1B2C3D40000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B1C2D3E40000000000000004;
+			remoteInfo = WorldIntelWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B1C2D3E40000000000000008 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B1C2D3E40000000000000009 /* WorldIntelWidgetExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A1B2C3D50000000000000001 /* WorldIntelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldIntelApp.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000002 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000003 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000004 /* RSSParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RSSParser.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000005 /* CacheStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheStore.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000006 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000007 /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000008 /* MapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapView.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000009 /* DisastersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisastersView.swift; sourceTree = "<group>"; };
+		A1B2C3D5000000000000000A /* SupplyChainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupplyChainView.swift; sourceTree = "<group>"; };
+		A1B2C3D5000000000000000B /* MarketsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketsView.swift; sourceTree = "<group>"; };
+		A1B2C3D5000000000000000C /* WatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchView.swift; sourceTree = "<group>"; };
+		A1B2C3D5000000000000000D /* WebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebView.swift; sourceTree = "<group>"; };
+		A1B2C3D5000000000000000E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A1B2C3D5000000000000000F /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000010 /* AIEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIEngine.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000011 /* BriefingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingView.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000012 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000013 /* BackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundRefresh.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1B2C3D40000000000000005 /* WorldIntel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WorldIntel.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1C2D3E50000000000000001 /* WorldIntelWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldIntelWidget.swift; sourceTree = "<group>"; };
+		B1C2D3E50000000000000002 /* WorldIntelWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WorldIntelWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1C2D3E50000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A1B2C3D40000000000000008 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1C2D3E40000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A1B2C3D40000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D40000000000000003 /* WorldIntel */,
+				B1C2D3E4000000000000000F /* WorldIntelWidget */,
+				A1B2C3D40000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B1C2D3E4000000000000000F /* WorldIntelWidget */ = {
+			isa = PBXGroup;
+			children = (
+				B1C2D3E50000000000000001 /* WorldIntelWidget.swift */,
+				B1C2D3E50000000000000003 /* Info.plist */,
+			);
+			path = WorldIntelWidget;
+			sourceTree = "<group>";
+		};
+		A1B2C3D40000000000000003 /* WorldIntel */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D50000000000000001 /* WorldIntelApp.swift */,
+				A1B2C3D50000000000000002 /* Models.swift */,
+				A1B2C3D50000000000000003 /* APIClient.swift */,
+				A1B2C3D50000000000000004 /* RSSParser.swift */,
+				A1B2C3D50000000000000005 /* CacheStore.swift */,
+				A1B2C3D50000000000000006 /* Components.swift */,
+				A1B2C3D50000000000000007 /* FeedView.swift */,
+				A1B2C3D50000000000000008 /* MapView.swift */,
+				A1B2C3D50000000000000009 /* DisastersView.swift */,
+				A1B2C3D5000000000000000A /* SupplyChainView.swift */,
+				A1B2C3D5000000000000000B /* MarketsView.swift */,
+				A1B2C3D5000000000000000C /* WatchView.swift */,
+				A1B2C3D5000000000000000D /* WebView.swift */,
+				A1B2C3D5000000000000000E /* SettingsView.swift */,
+				A1B2C3D5000000000000000F /* SearchView.swift */,
+				A1B2C3D50000000000000010 /* AIEngine.swift */,
+				A1B2C3D50000000000000011 /* BriefingView.swift */,
+				A1B2C3D50000000000000012 /* NotificationManager.swift */,
+				A1B2C3D50000000000000013 /* BackgroundRefresh.swift */,
+				A1B2C3D50000000000000014 /* Info.plist */,
+			);
+			path = WorldIntel;
+			sourceTree = "<group>";
+		};
+		A1B2C3D40000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D40000000000000005 /* WorldIntel.app */,
+				B1C2D3E50000000000000002 /* WorldIntelWidgetExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A1B2C3D40000000000000006 /* WorldIntel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B2C3D4000000000000000A /* Build configuration list for PBXNativeTarget "WorldIntel" */;
+			buildPhases = (
+				A1B2C3D40000000000000007 /* Sources */,
+				A1B2C3D40000000000000008 /* Frameworks */,
+				A1B2C3D40000000000000009 /* Resources */,
+				B1C2D3E40000000000000008 /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B1C2D3E4000000000000000B /* PBXTargetDependency */,
+			);
+			name = WorldIntel;
+			productName = WorldIntel;
+			productReference = A1B2C3D40000000000000005 /* WorldIntel.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B1C2D3E40000000000000004 /* WorldIntelWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B1C2D3E4000000000000000E /* Build configuration list for PBXNativeTarget "WorldIntelWidgetExtension" */;
+			buildPhases = (
+				B1C2D3E40000000000000005 /* Sources */,
+				B1C2D3E40000000000000006 /* Frameworks */,
+				B1C2D3E40000000000000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WorldIntelWidgetExtension;
+			productName = WorldIntelWidgetExtension;
+			productReference = B1C2D3E50000000000000002 /* WorldIntelWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A1B2C3D40000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					A1B2C3D40000000000000006 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					B1C2D3E40000000000000004 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = A1B2C3D4000000000000000B /* Build configuration list for PBXProject "WorldIntel" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A1B2C3D40000000000000002;
+			productRefGroup = A1B2C3D40000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A1B2C3D40000000000000006 /* WorldIntel */,
+				B1C2D3E40000000000000004 /* WorldIntelWidgetExtension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A1B2C3D40000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1C2D3E40000000000000007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A1B2C3D40000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1B2C3D60000000000000001 /* WorldIntelApp.swift in Sources */,
+				A1B2C3D60000000000000002 /* Models.swift in Sources */,
+				A1B2C3D60000000000000003 /* APIClient.swift in Sources */,
+				A1B2C3D60000000000000004 /* RSSParser.swift in Sources */,
+				A1B2C3D60000000000000005 /* CacheStore.swift in Sources */,
+				A1B2C3D60000000000000006 /* Components.swift in Sources */,
+				A1B2C3D60000000000000007 /* FeedView.swift in Sources */,
+				A1B2C3D60000000000000008 /* MapView.swift in Sources */,
+				A1B2C3D60000000000000009 /* DisastersView.swift in Sources */,
+				A1B2C3D6000000000000000A /* SupplyChainView.swift in Sources */,
+				A1B2C3D6000000000000000B /* MarketsView.swift in Sources */,
+				A1B2C3D6000000000000000C /* WatchView.swift in Sources */,
+				A1B2C3D6000000000000000D /* WebView.swift in Sources */,
+				A1B2C3D6000000000000000E /* SettingsView.swift in Sources */,
+				A1B2C3D6000000000000000F /* SearchView.swift in Sources */,
+				A1B2C3D60000000000000010 /* AIEngine.swift in Sources */,
+				A1B2C3D60000000000000011 /* BriefingView.swift in Sources */,
+				A1B2C3D60000000000000012 /* NotificationManager.swift in Sources */,
+				A1B2C3D60000000000000013 /* BackgroundRefresh.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1C2D3E40000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1C2D3E40000000000000001 /* WorldIntelWidget.swift in Sources */,
+				B1C2D3E40000000000000002 /* Models.swift in Sources */,
+				B1C2D3E40000000000000003 /* RSSParser.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B1C2D3E4000000000000000B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B1C2D3E40000000000000004 /* WorldIntelWidgetExtension */;
+			targetProxy = B1C2D3E4000000000000000A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A1B2C3D4000000000000000C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A1B2C3D4000000000000000D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A1B2C3D4000000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WorldIntel/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.worldintel.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1B2C3D4000000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WorldIntel/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.worldintel.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B1C2D3E4000000000000000C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WorldIntelWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.worldintel.app.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B1C2D3E4000000000000000D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WorldIntelWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.worldintel.app.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A1B2C3D4000000000000000B /* Build configuration list for PBXProject "WorldIntel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D4000000000000000C /* Debug */,
+				A1B2C3D4000000000000000D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1B2C3D4000000000000000A /* Build configuration list for PBXNativeTarget "WorldIntel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D4000000000000000E /* Debug */,
+				A1B2C3D4000000000000000F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B1C2D3E4000000000000000E /* Build configuration list for PBXNativeTarget "WorldIntelWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B1C2D3E4000000000000000C /* Debug */,
+				B1C2D3E4000000000000000D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A1B2C3D40000000000000001 /* Project object */;
+}

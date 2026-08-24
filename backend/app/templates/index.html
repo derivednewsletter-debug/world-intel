@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>🌍 World Intelligence <span class="live-dot" title="Live — refreshes every 30 seconds"></span></h1>
+      <span class="subtitle">live global events · disasters · markets · supply chain</span>
+      <nav class="tabs" id="tabs"></nav>
+    </header>
+    <main id="main"></main>
+    <div class="footer" id="footer"></div>
+  </div>
+
+  <div class="modal-backdrop" id="healthBackdrop" style="display:none">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Source health</h3>
+        <button class="chip" id="healthClose">Close</button>
+      </div>
+      <div id="healthTable"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="eventBackdrop" style="display:none">
+    <div class="modal" id="eventModal"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

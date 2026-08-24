@@ -1,0 +1,7 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+httpx[http2]>=0.28
+feedparser>=6.0
+APScheduler>=3.10
+cryptography>=44
+jinja2>=3.1

@@ -270,9 +270,16 @@ async def api_event(event_id: str):
     """One event + related events by title similarity (for detail modal + timelines)."""
     ev = db.get_event(event_id)
     if not ev:
-        return {"event": None, "related": []}
-    related = [e for e in db.get_related_events(event_id) if e["id"] != event_id][:8]
-    return {"event": ev, "related": related}
+        return {"event": None, "cluster": None, "related": []}
+    all_related = db.get_related_events(event_id)
+    related = [e for e in all_related if e["id"] != event_id][:8]
+    # Build a timeline from all related events (sorted chronologically).
+    timeline = [{"published": e["published"], "title": e["title"],
+                 "source": e["source"], "url": e.get("url"),
+                 "severity": e["severity"]}
+                for e in sorted(all_related, key=lambda e: e["published"])][:20]
+    cluster = {"id": event_id, "timeline": timeline} if len(timeline) > 1 else None
+    return {"event": ev, "cluster": cluster, "related": related}
 
 
 # ---------------------------------------------------------------------------

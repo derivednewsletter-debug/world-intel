@@ -51,18 +51,35 @@ struct StoryCluster: Identifiable {
 
 func clusterEvents(_ events: [WorldEvent]) -> [StoryCluster] {
     var clusters: [(tokens: Set<String>, events: [WorldEvent])] = []
+    var tokenIndex: [String: Set<Int>] = [:]  // inverted index for fast lookup
     for e in events {
         let toks = Set(tokenize(e.title))
+        // Find candidate clusters via shared tokens (much faster than O(n)).
+        var candidateCounts: [Int: Int] = [:]
+        for t in toks {
+            for ci in tokenIndex[t, default: []] {
+                candidateCounts[ci, default: 0] += 1
+            }
+        }
         var best = -1
         var bestSim = 0.38
-        for (i, c) in clusters.enumerated() {
-            let sim = jaccard(c.tokens, toks)
-            if sim > bestSim { bestSim = sim; best = i }
+        for (ci, shared) in candidateCounts {
+            let unionSize = clusters[ci].tokens.count + toks.count - shared
+            let sim = unionSize > 0 ? Double(shared) / Double(unionSize) : 0
+            if sim > bestSim { bestSim = sim; best = ci }
         }
         if best >= 0 {
             clusters[best].events.append(e)
+            clusters[best].tokens.formUnion(toks)
+            for t in toks {
+                tokenIndex[t, default: []].insert(best)
+            }
         } else {
+            let idx = clusters.count
             clusters.append((toks, [e]))
+            for t in toks {
+                tokenIndex[t, default: []].insert(idx)
+            }
         }
     }
     return clusters.compactMap { c in

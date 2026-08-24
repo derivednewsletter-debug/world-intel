@@ -124,6 +124,20 @@ struct EventRow: View {
                         .lineLimit(2)
                 }
             }
+            if let imageURL = event.image, let url = URL(string: imageURL) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure:
+                        EmptyView()
+                    default:
+                        ProgressView().frame(width: 48, height: 48)
+                    }
+                }
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
         }
         .padding(11)
         .panel()

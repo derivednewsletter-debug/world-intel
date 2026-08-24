@@ -125,5 +125,98 @@ class TestSourceStatus(DbTestCase):
         self.assertTrue(db.is_in_cooldown("src-a"))
 
 
+class TestBatchUpsert(DbTestCase):
+    def test_batch_inserts_many(self):
+        events = [_event(i, f"Batch story {i}") for i in range(20)]
+        n = db.upsert_events_batch(events)
+        self.assertEqual(n, 20)
+        self.assertEqual(db.count_events(), 20)
+
+    def test_batch_dedupes(self):
+        events = [
+            _event(1, "Same headline"),
+            _event(2, "Same headline"),
+            _event(3, "Different story"),
+        ]
+        n = db.upsert_events_batch(events)
+        self.assertEqual(n, 2)  # one deduped
+        self.assertEqual(db.count_events(), 2)
+
+    def test_batch_empty_list(self):
+        self.assertEqual(db.upsert_events_batch([]), 0)
+
+
+class TestGetIndicator(DbTestCase):
+    def test_direct_lookup(self):
+        db.set_indicator({"series_id": "VIX", "name": "VIX", "category": "markets",
+                          "latest_value": 25.0, "latest_date": "2026-08-01",
+                          "history": [{"date": "2026-07-01", "value": 22.0}]})
+        ind = db.get_indicator("VIX")
+        self.assertIsNotNone(ind)
+        self.assertEqual(ind["latest_value"], 25.0)
+        self.assertEqual(len(ind["history"]), 1)
+
+    def test_missing_returns_none(self):
+        self.assertIsNone(db.get_indicator("NONEXISTENT"))
+
+
+class TestCountByCategory(DbTestCase):
+    def test_groups_correctly(self):
+        db.upsert_event(_event(1, "Conflict A", category="conflict"))
+        db.upsert_event(_event(2, "Conflict B", category="conflict"))
+        db.upsert_event(_event(3, "Market A", category="markets"))
+        counts = db.count_events_by_category()
+        self.assertEqual(counts["conflict"], 2)
+        self.assertEqual(counts["markets"], 1)
+        self.assertNotIn("disaster", counts)
+
+    def test_empty_db(self):
+        counts = db.count_events_by_category()
+        self.assertEqual(counts, {})
+
+
+class TestActivityBuckets(DbTestCase):
+    def test_buckets_across_hours(self):
+        # Use a fixed anchor 3h in the past so all events land cleanly.
+        anchor = int(time.time() * 1000) - 3 * 3_600_000
+        db.upsert_event(_event(1, "2h ago", published=anchor + 0))
+        db.upsert_event(_event(2, "1h ago", published=anchor + 3_600_000))
+        db.upsert_event(_event(3, "Now", published=anchor + 2 * 3_600_000))
+        buckets = db.get_activity_buckets(anchor, 3)
+        self.assertEqual(len(buckets), 3)
+        self.assertEqual(buckets[0]["count"], 1)  # oldest hour
+        self.assertEqual(buckets[1]["count"], 1)
+        self.assertEqual(buckets[2]["count"], 1)  # newest hour
+
+    def test_empty_buckets(self):
+        now = int(time.time() * 1000)
+        buckets = db.get_activity_buckets(now - 24 * 3_600_000, 24)
+        self.assertEqual(len(buckets), 24)
+        self.assertTrue(all(b["count"] == 0 for b in buckets))
+
+
+class TestRelatedEvents(DbTestCase):
+    def test_finds_same_norm_title(self):
+        db.upsert_event(_event(1, "Wildfire forces evacuations near Reno"))
+        db.upsert_event(_event(2, "Wildfire forces evacuations near Reno spread"))
+        db.upsert_event(_event(3, "Completely unrelated story"))
+        related = db.get_related_events("ev-1")
+        # Should find at least the prefix-matched events
+        ids = {e["id"] for e in related}
+        self.assertIn("ev-1", ids)
+
+    def test_nonexistent_event_returns_empty(self):
+        self.assertEqual(db.get_related_events("does-not-exist"), [])
+
+
+class TestGetEventsBatch(DbTestCase):
+    def test_many_inserts_then_query(self):
+        events = [_event(i, f"Story {i}") for i in range(100)]
+        db.upsert_events_batch(events)
+        results = db.get_events(limit=50)
+        self.assertEqual(len(results), 50)
+        self.assertEqual(db.count_events(), 100)
+
+
 if __name__ == "__main__":
     unittest.main()

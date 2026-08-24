@@ -3,6 +3,7 @@ import re
 import socket
 import threading
 import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
 from . import db, watchlist
@@ -22,6 +24,8 @@ from concurrent.futures import ThreadPoolExecutor
 from .config import APNS, CATEGORIES, HOST, LIVE_STREAMS, PORT
 from .push.apns import send_push
 from .scheduler import start_scheduler, stop_scheduler
+
+APP_VERSION = "0.3.0"
 
 _push_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="push")
 
@@ -37,7 +41,7 @@ async def lifespan(_: FastAPI):
     stop_scheduler()
 
 
-app = FastAPI(title="World Intelligence", lifespan=lifespan)
+app = FastAPI(title="World Intelligence", version=APP_VERSION, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,6 +49,61 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Simple in-memory rate limiter (sliding window per IP)
+# ---------------------------------------------------------------------------
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Sliding-window rate limiter: max `limit` requests per `window` seconds.
+    Only applied to mutation endpoints (PUT/POST/DELETE) to prevent abuse.
+    Read endpoints are unlimited — the dashboard is a personal tool."""
+
+    def __init__(self, app, limit: int = 30, window: float = 60.0):
+        super().__init__(app)
+        self.limit = limit
+        self.window = window
+        self._hits: dict[str, list[float]] = defaultdict(list)
+        self._lock = threading.Lock()
+        # Cleanup old entries every 5 minutes.
+        self._last_cleanup = time.time()
+
+    def _client_ip(self, request: Request) -> str:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        return request.client.host if request.client else "unknown"
+
+    async def dispatch(self, request, call_next):
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return await call_next(request)
+        ip = self._client_ip(request)
+        now = time.time()
+        with self._lock:
+            # Periodic cleanup.
+            if now - self._last_cleanup > 300:
+                self._last_cleanup = now
+                cutoff = now - self.window
+                for k in list(self._hits):
+                    self._hits[k] = [t for t in self._hits[k] if t > cutoff]
+                    if not self._hits[k]:
+                        del self._hits[k]
+            cutoff = now - self.window
+            self._hits[ip] = [t for t in self._hits[ip] if t > cutoff]
+            if len(self._hits[ip]) >= self.limit:
+                retry = self._hits[ip][0] + self.window - now
+                return Response(
+                    content='{"error":"rate limit exceeded","retry":' + str(int(retry) + 1) + '}',
+                    status_code=429,
+                    media_type="application/json",
+                    headers={"Retry-After": str(int(retry) + 1)},
+                )
+            self._hits[ip].append(now)
+        return await call_next(request)
+
+
+app.add_middleware(RateLimitMiddleware, limit=60, window=60.0)
 
 _BASE = Path(__file__).resolve().parent
 _TEMPLATES = Jinja2Templates(directory=str(_BASE / "templates"))
@@ -184,9 +243,21 @@ async def api_activity(request: Request):
 @app.get("/api/health")
 async def api_health():
     """Uptime / liveness check — handy for the iOS app's optional push server URL."""
+    import os
+    db_size = 0
+    try:
+        from .config import DB_PATH
+        db_size = os.path.getsize(DB_PATH)
+    except (OSError, ImportError):
+        pass
+    sources = db.get_source_status()
+    healthy = sum(1 for s in sources if s["last_ok"])
     return {
         "status": "ok",
+        "version": APP_VERSION,
         "total": db.count_events(),
+        "sources": {"healthy": healthy, "total": len(sources)},
+        "dbSizeBytes": db_size,
         "updatedAt": int(time.time() * 1000),
         "uptimeSec": round(time.time() - _started_at),
     }

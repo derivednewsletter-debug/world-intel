@@ -1,6 +1,13 @@
-"""HTTP helpers — httpx with timeout, user agent, and one retry on network/5xx errors."""
+"""HTTP helpers — httpx with timeout, user agent, one retry, and circuit breaker.
+
+The circuit breaker tracks failures per host domain. After 5 consecutive
+failures to a host, requests to that host are short-circuited for 60s to
+avoid wasting time on a known-dead endpoint (e.g. rate-limited GDELT).
+"""
 import json
+import threading
 import time
+from urllib.parse import urlparse
 
 import httpx
 
@@ -25,7 +32,53 @@ class JsonDecodeError(Exception):
     pass
 
 
+class CircuitOpen(Exception):
+    """Raised when the circuit breaker is open for a host."""
+    pass
+
+
+# Circuit breaker state: host → (failures, open_until_epoch)
+_circuit: dict[str, tuple[int, float]] = {}
+_circuit_lock = threading.Lock()
+_CIRCUIT_THRESHOLD = 5      # consecutive failures to trip
+_CIRCUIT_COOLDOWN = 60.0    # seconds to keep circuit open
+
+
+def _circuit_key(url: str) -> str:
+    try:
+        return urlparse(url).hostname or "unknown"
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
+
+def _check_circuit(url: str) -> None:
+    key = _circuit_key(url)
+    with _circuit_lock:
+        failures, open_until = _circuit.get(key, (0, 0.0))
+    if failures >= _CIRCUIT_THRESHOLD and time.time() < open_until:
+        raise CircuitOpen(f"Circuit breaker open for {key} — too many failures")
+
+
+def _record_failure(url: str) -> None:
+    key = _circuit_key(url)
+    with _circuit_lock:
+        failures, _ = _circuit.get(key, (0, 0.0))
+        failures += 1
+        if failures >= _CIRCUIT_THRESHOLD:
+            _circuit[key] = (failures, time.time() + _CIRCUIT_COOLDOWN)
+        else:
+            _circuit[key] = (failures, 0.0)
+
+
+def _record_success(url: str) -> None:
+    key = _circuit_key(url)
+    with _circuit_lock:
+        _circuit[key] = (0, 0.0)
+
+
 def fetch_text(url: str, timeout_ms: int = 20000, headers: dict | None = None) -> str:
+    _check_circuit(url)
+
     def _attempt() -> str:
         res = _client.get(url, timeout=timeout_ms / 1000, headers=headers)
         if res.status_code >= 400:
@@ -33,17 +86,27 @@ def fetch_text(url: str, timeout_ms: int = 20000, headers: dict | None = None) -
         return res.text
 
     try:
-        return _attempt()
+        result = _attempt()
+        _record_success(url)
+        return result
+    except CircuitOpen:
+        raise
     except HttpError as err:
+        _record_failure(url)
         if err.status < 500:
             raise
         # fall through to retry for 5xx
         time.sleep(1.5)
-        return _attempt()
+        result = _attempt()
+        _record_success(url)
+        return result
     except (httpx.HTTPError, OSError):
+        _record_failure(url)
         # network blip — retry once
         time.sleep(1.5)
-        return _attempt()
+        result = _attempt()
+        _record_success(url)
+        return result
 
 
 def fetch_json(url: str, timeout_ms: int = 20000, headers: dict | None = None):

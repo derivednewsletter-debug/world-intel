@@ -26,10 +26,32 @@ HOST = os.environ.get("HOST", "0.0.0.0")
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = os.environ.get("DB_PATH", str(BASE_DIR / "data" / "world-intel.db"))
 RETENTION_DAYS = int(os.environ.get("RETENTION_DAYS", "7"))
-USER_AGENT = "WorldIntel/0.2 (personal dashboard)"
+USER_AGENT = "WorldIntel/0.3 (personal dashboard)"
 
 FRED_API_KEY = os.environ.get("FRED_API_KEY", "PASTE_YOUR_FRED_KEY_HERE")
 FIRMS_API_KEY = os.environ.get("FIRMS_API_KEY", "PASTE_YOUR_FIRMS_KEY_HERE")
+
+
+def _validate_config() -> None:
+    """Log warnings for common misconfigurations at import time."""
+    import sys
+    warnings = []
+    if FRED_API_KEY.startswith("PASTE_"):
+        warnings.append("FRED_API_KEY not set — FRED indicators disabled")
+    if FIRMS_API_KEY.startswith("PASTE_"):
+        warnings.append("FIRMS_API_KEY not set — satellite fire detection disabled")
+    if PORT < 1024 and PORT != 80:
+        warnings.append(f"PORT {PORT} requires root/admin on most systems")
+    if not Path(DB_PATH).parent.exists():
+        try:
+            Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            warnings.append(f"Cannot create DB directory: {Path(DB_PATH).parent}")
+    for w in warnings:
+        print(f"⚠ {w}", file=sys.stderr)
+
+
+_validate_config()
 
 APNS = {
     "enabled": os.environ.get("APNS_ENABLED", "0") == "1",

@@ -1304,6 +1304,21 @@ function init() {
     if (TABS.some((t) => t.id === id) && id !== state.tab) switchTab(id);
   });
 
+  // Keyboard shortcuts: 1-8 switch tabs, Escape closes modals.
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+    if (e.key === "Escape") {
+      $("#healthBackdrop").style.display = "none";
+      $("#eventBackdrop").style.display = "none";
+      return;
+    }
+    const num = parseInt(e.key, 10);
+    if (num >= 1 && num <= TABS.length) {
+      e.preventDefault();
+      switchTab(TABS[num - 1].id);
+    }
+  });
+
   // Foreground refresh: active tab refreshes every 30s, stats every 60s.
   setInterval(() => { refreshTab(state.tab); }, 30000);
   setInterval(loadStats, 60000);

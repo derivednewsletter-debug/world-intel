@@ -282,3 +282,31 @@ mark { background: rgba(250, 173, 20, 0.35); color: var(--text); border-radius: 
 .health-table th, .health-table td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--border); }
 .health-table th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
 .health-table td.muted { color: var(--muted); font-size: 11.5px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Mobile responsiveness */
+@media (max-width: 640px) {
+  header { padding: 10px 12px; gap: 8px; }
+  header h1 { font-size: 14px; }
+  .subtitle { display: none; }
+  main { padding: 10px 12px 30px; }
+  .grid2 { grid-template-columns: 1fr; }
+  .stat-cards { grid-template-columns: repeat(2, 1fr); }
+  .watch-grid { grid-template-columns: 1fr; }
+  .card { padding: 9px 11px; gap: 8px; }
+  .card .thumb { width: 56px; height: 42px; }
+  .modal { max-height: 90vh; padding: 14px; border-radius: 10px; }
+  .tabs { gap: 2px; }
+  .tabs button { padding: 5px 9px; font-size: 11.5px; }
+  .breaking-list { flex-direction: column; gap: 2px; }
+  .map-wrap { height: 60vh; min-height: 300px; }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .card { animation: none; }
+  .modal { animation: none; }
+  .live-dot { animation: none; }
+  .card:hover { transform: none; }
+  .stat-card:hover { transform: none; }
+  .chip:hover { transform: none; }
+}

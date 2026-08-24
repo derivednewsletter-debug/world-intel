@@ -169,15 +169,17 @@ def upsert_event(ev: dict) -> bool:
     return cur.rowcount > 0
 
 
-def upsert_events_batch(events: list[dict]) -> int:
+def upsert_events_batch(events: list[dict]) -> tuple[int, list[dict]]:
     """Insert many events in one transaction — much faster than one-at-a-time.
-    Returns the count of events actually inserted (after dedup)."""
+    Returns (count, inserted_events) so collectors can publish new events
+    to the real-time SSE hub."""
     if not events:
-        return 0
+        return 0, []
     now_ms = int(time.time() * 1000)
     cutoff = now_ms - 24 * 3600_000
     c = _conn()
     n = 0
+    inserted = []
     with c:
         # Fetch all existing norms in one shot for dedup.
         existing = {
@@ -213,7 +215,8 @@ def upsert_events_batch(events: list[dict]) -> int:
                 ),
             )
             n += 1
-    return n
+            inserted.append(ev)
+    return n, inserted
 
 
 def _escape_like(s: str) -> str:

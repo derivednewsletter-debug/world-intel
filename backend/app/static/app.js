@@ -33,6 +33,8 @@ const TABS = [
 
 const state = {
   tab: "live",
+  sseConnected: false,
+  boot: null,  // { phase, progress, message, done }
   stats: null,
   statsFailed: false,
   feed: { events: [], total: 0, offset: 0, cats: new Set(), majorOnly: false, trends: { words: [], bigrams: [] }, spikes: [], trendQuery: null, updated: null, loading: true, error: false },
@@ -1319,9 +1321,158 @@ function init() {
     }
   });
 
-  // Foreground refresh: active tab refreshes every 30s, stats every 60s.
-  setInterval(() => { refreshTab(state.tab); }, 30000);
+  // Foreground refresh: stats every 60s (feed is now SSE-driven, no polling).
   setInterval(loadStats, 60000);
+
+  // Boot progress bar — polls /api/startup until the server is ready.
+  pollBootProgress();
+
+  // SSE: real-time event push from server.
+  connectSSE();
+}
+
+// ---------------------------------------------------------------------------
+// Boot progress bar
+// ---------------------------------------------------------------------------
+
+let _bootPollTimer = null;
+function pollBootProgress() {
+  if (_bootPollTimer) return;
+  let done = false;
+  _bootPollTimer = setInterval(async () => {
+    try {
+      const d = await api("/api/startup");
+      state.boot = d;
+      renderBootProgress();
+      if (d.done) {
+        clearInterval(_bootPollTimer);
+        _bootPollTimer = null;
+        done = true;
+        // Hide the boot bar after a short delay.
+        setTimeout(() => {
+          const bar = $("#bootBar");
+          if (bar) bar.style.display = "none";
+        }, 1500);
+      }
+    } catch (e) {
+      // Server not ready yet — keep polling.
+    }
+  }, 500);
+}
+
+function renderBootProgress() {
+  const b = state.boot;
+  if (!b) return;
+  let bar = $("#bootBar");
+  if (!bar) {
+    bar = el("div", { id: "bootBar", style: "position:fixed;top:0;left:0;right:0;z-index:9999;transition:opacity 0.3s" });
+    document.body.appendChild(bar);
+  }
+  if (b.done) {
+    bar.style.opacity = "0";
+    return;
+  }
+  bar.innerHTML = "";
+  const track = el("div", { style: "height:3px;background:#1a2130" });
+  const fill = el("div", { style: "height:100%;background:linear-gradient(90deg,#4f8cff,#40c057);transition:width 0.3s;width:" + b.progress + "%" });
+  track.appendChild(fill);
+  bar.appendChild(track);
+  const msg = el("div", { style: "text-align:center;padding:4px;font-size:11px;color:#8b93a7;background:#0b0e14;border-bottom:1px solid #242e40" }, b.message);
+  bar.appendChild(msg);
+}
+
+// ---------------------------------------------------------------------------
+// Server-Sent Events — real-time push
+// ---------------------------------------------------------------------------
+
+let _sseRetryDelay = 1000;
+function connectSSE() {
+  const es = new EventSource("/api/events/stream");
+  es.onopen = () => {
+    state.sseConnected = true;
+    _sseRetryDelay = 1000;
+    updateSSEIndicator();
+  };
+  es.addEventListener("event", (e) => {
+    try {
+      const ev = JSON.parse(e.data);
+      handleLiveEvent(ev);
+    } catch (err) {}
+  });
+  es.addEventListener("batch", (e) => {
+    try {
+      const events = JSON.parse(e.data);
+      handleLiveBatch(events);
+    } catch (err) {}
+  });
+  es.addEventListener("stats", (e) => {
+    try {
+      const stats = JSON.parse(e.data);
+      if (stats.type === "boot_complete") {
+        loadStats();
+        loadTrends();
+      }
+    } catch (err) {}
+  });
+  es.onerror = () => {
+    state.sseConnected = false;
+    updateSSEIndicator();
+    es.close();
+    // Auto-reconnect with exponential backoff.
+    setTimeout(connectSSE, _sseRetryDelay);
+    _sseRetryDelay = Math.min(_sseRetryDelay * 2, 30000);
+  };
+}
+
+function handleLiveEvent(ev) {
+  // Add to feed if not a duplicate.
+  const seen = new Set(state.feed.events.map((e) => e.id));
+  if (!seen.has(ev.id)) {
+    state.feed.events.unshift(ev);
+    if (state.feed.events.length > 500) state.feed.events.length = 500;
+    state.feed.total++;
+    state.feed.updated = Date.now();
+    scanForAlerts([ev]);
+    if (state.tab === "live") renderFeed();
+  }
+}
+
+function handleLiveBatch(events) {
+  if (!Array.isArray(events)) return;
+  const seen = new Set(state.feed.events.map((e) => e.id));
+  let added = 0;
+  for (const ev of events) {
+    if (!seen.has(ev.id)) {
+      state.feed.events.unshift(ev);
+      seen.add(ev.id);
+      added++;
+    }
+  }
+  if (added) {
+    if (state.feed.events.length > 500) state.feed.events.length = 500;
+    state.feed.total += added;
+    state.feed.updated = Date.now();
+    scanForAlerts(events);
+    if (state.tab === "live") renderFeed();
+  }
+}
+
+function updateSSEIndicator() {
+  let dot = document.getElementById("sseDot");
+  if (!dot) {
+    dot = el("span", { id: "sseDot", title: "Real-time connection" });
+    dot.style.cssText = "width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-left:4px";
+    document.querySelector("header").appendChild(dot);
+  }
+  if (state.sseConnected) {
+    dot.style.background = "var(--ok)";
+    dot.style.boxShadow = "0 0 4px rgba(64,192,87,0.5)";
+    dot.title = "Live — real-time events streaming";
+  } else {
+    dot.style.background = "var(--err)";
+    dot.style.boxShadow = "0 0 4px rgba(255,77,79,0.5)";
+    dot.title = "Disconnected — reconnecting…";
+  }
 }
 
 document.addEventListener("DOMContentLoaded", init);

@@ -7,6 +7,7 @@ import feedparser
 
 from ..db import set_source_status, upsert_events_batch
 from ..dedupe import compute_severity, event_id
+from ..eventhub import hub
 from ..fetch import fetch_json, fetch_text
 
 EONET_CATEGORY_MAP = {
@@ -53,7 +54,10 @@ def collect_eonet() -> int:
             "published": published,
             "geo": {"lat": coords[1], "lon": coords[0], "place": e.get("title", "")} if coords else None,
         })
-    return upsert_events_batch(events)
+    n, inserted = upsert_events_batch(events)
+    if inserted:
+        hub.publish_batch(inserted)
+    return n
 
 
 def _parse_date(s) -> int:
@@ -93,7 +97,10 @@ def collect_usgs() -> int:
             "published": props.get("time") or int(time.time() * 1000),
             "geo": {"lat": coords[1], "lon": coords[0], "place": place} if len(coords) >= 2 else None,
         })
-    return upsert_events_batch(events)
+    n, inserted = upsert_events_batch(events)
+    if inserted:
+        hub.publish_batch(inserted)
+    return n
 
 
 def collect_gdacs() -> int:
@@ -120,7 +127,10 @@ def collect_gdacs() -> int:
             "published": published,
             "geo": {"lat": lat, "lon": lon} if lat is not None and lon is not None else None,
         })
-    return upsert_events_batch(events)
+    n, inserted = upsert_events_batch(events)
+    if inserted:
+        hub.publish_batch(inserted)
+    return n
 
 
 def _to_float(v) -> float | None:

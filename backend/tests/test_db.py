@@ -128,8 +128,9 @@ class TestSourceStatus(DbTestCase):
 class TestBatchUpsert(DbTestCase):
     def test_batch_inserts_many(self):
         events = [_event(i, f"Batch story {i}") for i in range(20)]
-        n = db.upsert_events_batch(events)
+        n, inserted = db.upsert_events_batch(events)
         self.assertEqual(n, 20)
+        self.assertEqual(len(inserted), 20)
         self.assertEqual(db.count_events(), 20)
 
     def test_batch_dedupes(self):
@@ -138,12 +139,15 @@ class TestBatchUpsert(DbTestCase):
             _event(2, "Same headline"),
             _event(3, "Different story"),
         ]
-        n = db.upsert_events_batch(events)
+        n, inserted = db.upsert_events_batch(events)
         self.assertEqual(n, 2)  # one deduped
+        self.assertEqual(len(inserted), 2)
         self.assertEqual(db.count_events(), 2)
 
     def test_batch_empty_list(self):
-        self.assertEqual(db.upsert_events_batch([]), 0)
+        n, inserted = db.upsert_events_batch([])
+        self.assertEqual(n, 0)
+        self.assertEqual(inserted, [])
 
 
 class TestGetIndicator(DbTestCase):

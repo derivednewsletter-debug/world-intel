@@ -17,14 +17,28 @@ __all__ = [
 ]
 
 
+def _publish_new_events(inserted: list) -> None:
+    """Publish newly inserted events to the real-time SSE hub."""
+    if not inserted:
+        return
+    try:
+        from ..eventhub import hub
+        hub.publish_batch(inserted)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def run_all() -> None:
     """Run every collector once (used at boot and by `python -m app.collect`).
 
     GDELT jobs run sequentially and last — they share a strict per-IP rate limit.
+    Each collector publishes new events to the SSE hub for real-time push.
     """
+    _fast = [run_rss, run_disasters, run_weather, run_spaceweather,
+             run_watch_feed, run_money]
+    _key = [run_fred, run_firms]
     with ThreadPoolExecutor(max_workers=8) as ex:
-        futures = [ex.submit(fn) for fn in (run_rss, run_disasters, run_fred, run_firms,
-                                            run_weather, run_spaceweather, run_watch_feed, run_money)]
+        futures = [ex.submit(fn) for fn in _fast + _key]
         for f in futures:
             try:
                 f.result()

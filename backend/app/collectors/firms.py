@@ -12,6 +12,7 @@ from urllib.parse import quote
 from ..config import FIRMS_API_KEY
 from ..db import set_source_status, upsert_events_batch
 from ..dedupe import compute_severity, event_id
+from ..eventhub import hub
 from ..fetch import fetch_text
 
 
@@ -109,7 +110,10 @@ def collect_firms() -> int:
             "published": int(time.time() * 1000),
             "geo": {"lat": c["lat"] + 0.5, "lon": c["lon"] + 0.5, "place": f"{c['lat']:.1f}°, {c['lon']:.1f}°"},
         })
-    return upsert_events_batch(events)
+    n, inserted = upsert_events_batch(events)
+    if inserted:
+        hub.publish_batch(inserted)
+    return n
 
 
 def run_firms() -> None:

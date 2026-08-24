@@ -1,4 +1,6 @@
 """FastAPI server — REST API + AI endpoints + push + the Jinja2 dashboard."""
+import asyncio
+import json
 import re
 import socket
 import threading
@@ -8,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -20,6 +22,7 @@ from .ai.engine import (STOPWORDS, cluster_events, detect_spikes, generate_brief
 from .ai.stress import compute_stress
 from .collectors import run_all
 from concurrent.futures import ThreadPoolExecutor
+from .eventhub import hub
 
 from .config import APNS, CATEGORIES, HOST, LIVE_STREAMS, PORT
 from .push.apns import send_push
@@ -29,16 +32,86 @@ APP_VERSION = "0.3.0"
 
 _push_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="push")
 
+# Boot progress tracker — frontend can poll this to show a loading bar.
+_boot_state = {"phase": "init", "progress": 0, "message": "Starting…", "done": False}
+_boot_lock = threading.Lock()
+
+
+def _set_boot(phase: str, progress: int, message: str) -> None:
+    with _boot_lock:
+        _boot_state.update(phase=phase, progress=progress, message=message)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Boot on startup: init the DB, start the scheduler, kick off the first
     collection and the push scan. Everything shuts down cleanly on exit."""
+    _set_boot("db", 10, "Initializing database…")
     db.init_db()
+    _set_boot("scheduler", 20, "Starting scheduler…")
     start_scheduler()
+    _set_boot("collecting", 30, "Collecting from all sources…")
     threading.Thread(target=_push_scan, daemon=True).start()
-    threading.Thread(target=run_all, daemon=True).start()
+    threading.Thread(target=_boot_collect, daemon=True).start()
     yield
     stop_scheduler()
+
+
+def _boot_collect() -> None:
+    """Run all collectors at boot, updating progress as each group finishes."""
+    try:
+        from .collectors import (run_rss, run_disasters, run_fred, run_firms,
+                                 run_weather, run_spaceweather, run_watch_feed, run_money)
+        from .collectors.gdelt import run_gdelt_doc, run_gdelt_points
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        # Phase 1: Fast sources in parallel (RSS, weather, disasters, money, etc.)
+        fast_jobs = [run_rss, run_disasters, run_weather, run_spaceweather,
+                     run_watch_feed, run_money]
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            futures = {ex.submit(fn): fn.__name__ for fn in fast_jobs}
+            done = 0
+            for f in as_completed(futures):
+                done += 1
+                pct = 30 + int(50 * done / len(futures))
+                _set_boot("collecting", pct, f"Collected {done}/{len(futures)} fast sources…")
+                # Publish any new events to SSE subscribers
+                try:
+                    result = f.result()
+                except Exception:  # noqa: BLE001
+                    pass
+
+        # Phase 2: FRED + FIRMS (need API keys, may skip)
+        key_jobs = [run_fred, run_firms]
+        done = 0
+        for fn in key_jobs:
+            try:
+                fn()
+            except Exception:  # noqa: BLE001
+                pass
+            done += 1
+            _set_boot("collecting", 80 + done * 5, f"Key sources {done}/{len(key_jobs)}…")
+
+        # Phase 3: GDELT (rate-limited, sequential)
+        _set_boot("collecting", 90, "Collecting GDELT (rate-limited)…")
+        try:
+            run_gdelt_doc()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            run_gdelt_points()
+        except Exception:  # noqa: BLE001
+            pass
+
+        _set_boot("done", 100, "Dashboard ready!")
+        with _boot_lock:
+            _boot_state["done"] = True
+        # Publish stats so SSE clients get a fresh snapshot
+        hub.publish_stats({"type": "boot_complete", "total": db.count_events()})
+    except Exception as err:  # noqa: BLE001
+        _set_boot("error", 100, f"Collection error: {err}")
+        with _boot_lock:
+            _boot_state["done"] = True
 
 
 app = FastAPI(title="World Intelligence", version=APP_VERSION, lifespan=lifespan)
@@ -428,6 +501,46 @@ async def api_export(request: Request):
 async def index(request: Request):
     return _TEMPLATES.TemplateResponse(
         request, "index.html", {"title": "World Intelligence"}
+    )
+
+
+@app.get("/api/startup")
+async def api_startup():
+    """Boot progress — frontend polls this on load to show a loading bar."""
+    with _boot_lock:
+        return dict(_boot_state)
+
+
+@app.get("/api/events/stream")
+async def api_events_stream(request: Request):
+    """Server-Sent Events stream — pushes new events to the browser in real-time."""
+    sub_id, queue = hub.subscribe()
+
+    async def event_generator():
+        try:
+            # Send initial snapshot so the client has something immediately.
+            yield f"event: connected\ndata: {json.dumps({'subscribers': hub.subscriber_count})}\n\n"
+            while True:
+                # Check if client disconnected.
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(queue.get(), timeout=30)
+                    yield f"event: {payload['type']}\ndata: {json.dumps(payload['data'])}\n\n"
+                except asyncio.TimeoutError:
+                    # Send keepalive comment every 30s.
+                    yield f": keepalive {int(time.time())}\n\n"
+        finally:
+            hub.unsubscribe(sub_id)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

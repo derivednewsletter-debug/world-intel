@@ -8,6 +8,7 @@ import feedparser
 from ..config import ALL_RSS_SOURCES
 from ..db import set_source_status, upsert_events_batch
 from ..dedupe import compute_severity, event_id, refine_category
+from ..eventhub import hub
 from ..fetch import fetch_text
 
 _IMG_TAG = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.I)
@@ -113,7 +114,10 @@ def collect_feed(src: dict) -> int:
             "image": _extract_image(entry),
             "published": _parse_published(entry),
         })
-    return upsert_events_batch(events)
+    n, inserted = upsert_events_batch(events)
+    if inserted:
+        hub.publish_batch(inserted)
+    return n
 
 
 def run_rss() -> None:

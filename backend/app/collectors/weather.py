@@ -10,6 +10,7 @@ from urllib.parse import quote
 
 from ..db import set_source_status, upsert_events_batch
 from ..dedupe import compute_severity, event_id
+from ..eventhub import hub
 from ..fetch import fetch_json
 
 _ALERTS_URL = "https://api.weather.gov/alerts/active?status=actual"
@@ -77,7 +78,10 @@ def collect_weather() -> int:
             "published": published,
             "geo": {"lat": geo[0], "lon": geo[1], "place": area[:60]} if geo else None,
         })
-    return upsert_events_batch(events)
+    n, inserted = upsert_events_batch(events)
+    if inserted:
+        hub.publish_batch(inserted)
+    return n
 
 
 def _parse_iso(s) -> int:

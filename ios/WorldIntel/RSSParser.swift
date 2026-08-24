@@ -5,6 +5,7 @@ struct RSSItem {
     var link: String?
     var pubDate: String?
     var summary: String?
+    var image: String?
     var geoLat: Double?
     var geoLon: Double?
 
@@ -68,6 +69,8 @@ final class RSSParser: NSObject, XMLParserDelegate {
             if item.link == nil { item.link = text }
         case "pubDate", "published", "updated", "dc:date": item.pubDate = text
         case "description", "summary", "content:encoded", "content": item.summary = text
+        case "media:content", "media:thumbnail", "enclosure":
+            if let url = attributeDict["url"] { item.image = url }
         case "geo:lat", "georss:point":
             if elementName == "geo:lat" {
                 item.geoLat = Double(text)

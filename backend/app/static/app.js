@@ -199,8 +199,9 @@ function updateStatCards() {
 function sparkline(data, color) {
   if (!data || data.length < 2) return null;
   const w = 280, h = 48;
-  const vals = data.map((d) => d.value);
-  const min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
+  let min = Infinity, max = -Infinity;
+  for (const d of data) { if (d.value < min) min = d.value; if (d.value > max) max = d.value; }
+  const span = max - min || 1;
   const step = w / (data.length - 1);
   let dpath = "", lastX = 0, lastY = 0;
   data.forEach((d, i) => {
@@ -1098,7 +1099,8 @@ function openEventModal(ev) {
 function renderActivity() {
   const act = state.briefing.activity;
   if (!act || !act.buckets || !act.buckets.length) return null;
-  const max = Math.max(1, ...act.buckets.map((b) => b.count));
+  let max = 1;
+  for (const b of act.buckets) { if (b.count > max) max = b.count; }
   const panel = el("div", { class: "panel", style: "margin-bottom:14px" });
   panel.appendChild(el("div", { class: "meta" },
     el("span", { class: "cat", style: "background:#4f8cff22;color:#4f8cff" }, "Activity")));

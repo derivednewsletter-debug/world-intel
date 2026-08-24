@@ -25,7 +25,7 @@ _CATEGORY_RULES = [
     ("conflict", re.compile(r"\b(war|wars|invasion|missile|airstrike|air strike|ceasefire|troops|military|rebel|insurgent|protest|riot|battle|shelling|bombing|escalation|offensive)\b", re.I)),
     ("disaster", re.compile(r"\b(earthquake|wildfire|flood|flooding|hurricane|cyclone|typhoon|volcano|eruption|tsunami|landslide|mudslide|avalanche|famine)\b", re.I)),
     ("weather", re.compile(r"\b(blizzard|heatwave|heat wave|drought|tornado|monsoon|freezing|snowstorm|extreme weather)\b", re.I)),
-    ("tech", re.compile(r"\b(cyberattack|cyber attack|ransomware|data breach|hacking|hacked|outage|blackout|artificial intelligence|ai |semiconductor|chip maker|microchip)\b", re.I)),
+    ("tech", re.compile(r"\b(cyberattack|cyber attack|ransomware|data breach|hacking|hacked|outage|blackout|artificial intelligence|\bai\b|semiconductor|chip maker|microchip)\b", re.I)),
     ("energy", re.compile(r"\b(oil price|crude oil|opec|natural gas|lng|energy crisis|refinery|gas prices|petrol)\b", re.I)),
     ("supplychain", re.compile(r"\b(port congestion|freight|container ship|container shipping|supply chain|logistics|suez|panama canal|red sea shipping|strike at|shipping rates)\b", re.I)),
     ("markets", re.compile(r"\b(stock market|wall street|inflation|interest rate|central bank|recession|gdp|treasury yields|nasdaq|s&p 500|dow jones|dow closes)\b", re.I)),

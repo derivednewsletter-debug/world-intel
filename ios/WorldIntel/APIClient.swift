@@ -47,6 +47,7 @@ actor APIClient {
                         title: title,
                         url: item.link,
                         summary: item.summary,
+                        image: item.image,
                         published: item.date ?? Date.now.timeIntervalSince1970 * 1000,
                         geo: item.geo
                     ))
@@ -87,6 +88,7 @@ actor APIClient {
                 title: title,
                 url: sourceUrl,
                 summary: e["description"] as? String ?? "Active event (NASA EONET)",
+                image: nil,
                 published: Self.isoDate(dateStr) ?? Date.now.timeIntervalSince1970 * 1000,
                 geo: lat.isFinite && lon.isFinite ? Geo(lat: lat, lon: lon, place: title) : nil
             ))
@@ -123,6 +125,7 @@ actor APIClient {
                 title: title,
                 url: props["url"] as? String,
                 summary: nil,
+                image: nil,
                 published: (props["time"] as? Double) ?? Date.now.timeIntervalSince1970 * 1000,
                 geo: lat.isFinite && lon.isFinite ? Geo(lat: lat, lon: lon, place: place) : nil
             ))
@@ -148,6 +151,7 @@ actor APIClient {
                 title: title,
                 url: item.link,
                 summary: item.summary,
+                image: nil,
                 published: item.date ?? Date.now.timeIntervalSince1970 * 1000,
                 geo: item.geo
             ))
@@ -178,6 +182,7 @@ actor APIClient {
                 title: title,
                 url: p["url"] as? String,
                 summary: (p["desc"] as? String) ?? "Conflict/event cluster (GDELT)",
+                image: nil,
                 published: Date.now.timeIntervalSince1970 * 1000,
                 geo: Geo(lat: lat, lon: lon, place: title)
             ))

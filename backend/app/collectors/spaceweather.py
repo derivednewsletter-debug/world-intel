@@ -6,7 +6,7 @@ Events land in the weather category so they show on the map/weather tabs.
 """
 import time
 
-from ..db import set_source_status, upsert_event
+from ..db import set_source_status, upsert_events_batch
 from ..dedupe import compute_severity, event_id
 from ..fetch import fetch_json
 
@@ -48,7 +48,7 @@ def collect_spaceweather() -> int:
         return 0
     # Newest first, capped at the most recent alerts.
     alerts = sorted(data, key=lambda a: a.get("issue_datetime", ""), reverse=True)[:MAX_ALERTS]
-    n = 0
+    events = []
     for a in alerts:
         msg_type = (a.get("message_type") or "Summary").strip()
         product = (a.get("product_id") or "").strip()
@@ -58,7 +58,7 @@ def collect_spaceweather() -> int:
         if len(title) > 200:
             title = title[:200]
         base = _TYPE_SEVERITY.get(msg_type, 1)
-        ev = {
+        events.append({
             "id": event_id(title, product or a.get("issue_datetime") or ""),
             "source": "noaa-space-weather",
             "category": "weather",
@@ -68,10 +68,8 @@ def collect_spaceweather() -> int:
             "summary": message[:500] or None,
             "published": _parse_iso(a.get("issue_datetime")),
             "geo": None,
-        }
-        if upsert_event(ev):
-            n += 1
-    return n
+        })
+    return upsert_events_batch(events)
 
 
 def run_spaceweather() -> None:

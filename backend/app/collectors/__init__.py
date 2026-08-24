@@ -22,7 +22,7 @@ def run_all() -> None:
 
     GDELT jobs run sequentially and last — they share a strict per-IP rate limit.
     """
-    with ThreadPoolExecutor(max_workers=4) as ex:
+    with ThreadPoolExecutor(max_workers=8) as ex:
         futures = [ex.submit(fn) for fn in (run_rss, run_disasters, run_fred, run_firms,
                                             run_weather, run_spaceweather, run_watch_feed, run_money)]
         for f in futures:

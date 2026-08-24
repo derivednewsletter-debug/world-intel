@@ -1,6 +1,7 @@
 """GDELT collectors — DOC API articles (throttle-aware) + pointdata map points."""
 import calendar
 import json
+import time
 from urllib.parse import quote
 
 from ..config import GDELT_DOC_QUERIES, GDELT_EVENT_QUERY
@@ -49,13 +50,12 @@ def _with_retry(fn):
 
 def _parse_seendate(s: str) -> int:
     if not s or len(s) < 12:
-        return int(calendar.timegm(__import__("time").gmtime()) * 1000)
+        return int(calendar.timegm(time.gmtime()) * 1000)
     try:
         y, mo, d, h, mi = int(s[0:4]), int(s[4:6]), int(s[6:8]), int(s[8:10]), int(s[10:12])
         sec = int(s[12:14]) if len(s) >= 14 else 0
         return int(calendar.timegm((y, mo, d, h, mi, sec, 0, 0, 0)) * 1000)
     except (ValueError, OverflowError):
-        import time
         return int(time.time() * 1000)
 
 

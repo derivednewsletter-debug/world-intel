@@ -7,7 +7,7 @@ server-side history; money series append one point per run).
 import time
 
 from ..config import CRYPTO_COINS, FX_CURRENCIES
-from ..db import get_indicators, set_indicator, set_source_status
+from ..db import get_indicator, set_indicator, set_source_status
 from ..fetch import fetch_json
 
 _FX_URL = "https://open.er-api.com/v6/latest/USD"
@@ -20,8 +20,7 @@ def _accumulate(series_id: str, name: str, category: str, unit: str,
                 value: float, point_date: str | None = None) -> None:
     """Append one point to the series history, replacing the previous point if
     it's identical (same timestamp, same value) so repeated runs don't bloat it."""
-    existing = {i["series_id"]: i for i in get_indicators()}
-    prev = existing.get(series_id)
+    prev = get_indicator(series_id)
     hist = list((prev or {}).get("history") or [])
     point = {"date": point_date or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
              "value": value}

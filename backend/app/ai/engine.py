@@ -34,18 +34,33 @@ CLUSTER_SIM = 0.38
 
 
 def cluster_events(events: list) -> list:
-    clusters = []  # list of (tokens, events)
+    clusters = []  # list of [tokens_set, events_list]
+    # Inverted index: token → set of cluster indices that contain it.
+    token_index: dict[str, set[int]] = {}
     for ev in events:
         toks = set(tokenize(ev["title"]))
+        # Find candidate clusters via shared tokens (much faster than O(n)).
+        candidate_counts: dict[int, int] = {}
+        for t in toks:
+            for ci in token_index.get(t, ()):
+                candidate_counts[ci] = candidate_counts.get(ci, 0) + 1
         best, best_sim = -1, CLUSTER_SIM
-        for i, (ctoks, _) in enumerate(clusters):
-            sim = jaccard(ctoks, toks)
+        union_sizes = {i: len(clusters[i][0]) + len(toks) - c
+                       for i, c in candidate_counts.items()}
+        for ci, shared in candidate_counts.items():
+            sim = shared / union_sizes[ci] if union_sizes[ci] else 0
             if sim > best_sim:
-                best_sim, best = sim, i
+                best_sim, best = sim, ci
         if best >= 0:
             clusters[best][1].append(ev)
+            clusters[best][0] |= toks  # expand the cluster token set
+            for t in toks:
+                token_index.setdefault(t, set()).add(best)
         else:
-            clusters.append((toks, [ev]))
+            idx = len(clusters)
+            clusters.append([toks, [ev]])
+            for t in toks:
+                token_index.setdefault(t, set()).add(idx)
 
     now = time.time() * 1000
     out = []

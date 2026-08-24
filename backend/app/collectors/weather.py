@@ -8,7 +8,7 @@ run is capped at the most severe alerts so the feed doesn't flood.
 import time
 from urllib.parse import quote
 
-from ..db import set_source_status, upsert_event
+from ..db import set_source_status, upsert_events_batch
 from ..dedupe import compute_severity, event_id
 from ..fetch import fetch_json
 
@@ -48,7 +48,7 @@ def collect_weather() -> int:
         key=lambda f: _SEVERITY.get((f.get("properties") or {}).get("severity", "Unknown"), 0),
         reverse=True,
     )
-    n = 0
+    events = []
     for f in features[:MAX_ALERTS]:
         p = f.get("properties") or {}
         event = (p.get("event") or "Weather alert").strip()
@@ -66,7 +66,7 @@ def collect_weather() -> int:
         description = p.get("description") or ""
         summary = _clean(headline if len(headline) <= 200 else description[:400])
         base = _SEVERITY.get(p.get("severity", "Unknown"), 1)
-        ev = {
+        events.append({
             "id": event_id(headline, f.get("id") or title),
             "source": "noaa-weather",
             "category": "weather",
@@ -76,10 +76,8 @@ def collect_weather() -> int:
             "summary": summary,
             "published": published,
             "geo": {"lat": geo[0], "lon": geo[1], "place": area[:60]} if geo else None,
-        }
-        if upsert_event(ev):
-            n += 1
-    return n
+        })
+    return upsert_events_batch(events)
 
 
 def _parse_iso(s) -> int:

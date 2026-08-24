@@ -17,9 +17,13 @@ from .ai.engine import (STOPWORDS, cluster_events, detect_spikes, generate_brief
                         generate_world_summary, watch_alerts, watch_term_stats)
 from .ai.stress import compute_stress
 from .collectors import run_all
+from concurrent.futures import ThreadPoolExecutor
+
 from .config import APNS, CATEGORIES, HOST, LIVE_STREAMS, PORT
 from .push.apns import send_push
 from .scheduler import start_scheduler, stop_scheduler
+
+_push_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="push")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -107,7 +111,10 @@ async def api_events(request: Request):
 @app.get("/api/stats")
 async def api_stats():
     now = int(time.time() * 1000)
-    by_category = {c: db.count_events(category=c) for c in CATEGORIES}
+    by_category = db.count_events_by_category()
+    # Fill in zeros for categories with no events yet.
+    for c in CATEGORIES:
+        by_category.setdefault(c, 0)
     latest = db.get_events(limit=1)
     sources = []
     for s in db.get_source_status():
@@ -166,14 +173,11 @@ async def api_activity(request: Request):
     """Events per hour over the last N hours — powers the activity chart."""
     hours = _hours_param(request)
     since = int(time.time() * 1000) - hours * 3_600_000
-    buckets = {h: 0 for h in range(hours)}
-    for e in db.get_all_events_since(since):
-        idx = min(hours - 1, max(0, int((e["published"] - since) / 3_600_000)))
-        buckets[idx] += 1
+    buckets = db.get_activity_buckets(since, hours)
     return {
         "hours": hours,
-        "buckets": [{"hour": h, "count": buckets[h]} for h in range(hours)],
-        "total": sum(buckets.values()),
+        "buckets": buckets,
+        "total": sum(b["count"] for b in buckets),
     }
 
 
@@ -194,9 +198,8 @@ async def api_trends():
     events = db.get_events(since=since, limit=500)
     words: dict[str, int] = {}
     bigrams: dict[str, int] = {}
-    import re as _re
     for e in events:
-        toks = [t for t in _re.sub(r"[^a-z0-9 ]+", " ", e["title"].lower()).split()
+        toks = [t for t in re.sub(r"[^a-z0-9 ]+", " ", e["title"].lower()).split()
                 if len(t) > 3 and t not in STOPWORDS]
         for i, t in enumerate(toks):
             words[t] = words.get(t, 0) + 1
@@ -264,16 +267,12 @@ async def api_stress(request: Request):
 
 @app.get("/api/event/{event_id}")
 async def api_event(event_id: str):
-    """One event + the story cluster it belongs to (for detail modal + timelines)."""
+    """One event + related events by title similarity (for detail modal + timelines)."""
     ev = db.get_event(event_id)
     if not ev:
-        return {"event": None, "cluster": None, "related": []}
-    events = db.get_all_events_since(int(time.time() * 1000) - 24 * 3_600_000)
-    for c in cluster_events(events):
-        if c["id"] == event_id or any(s["id"] == event_id for s in c["sample"]):
-            related = [e for e in c["sample"] if e["id"] != event_id][:8]
-            return {"event": ev, "cluster": c, "related": related}
-    return {"event": ev, "cluster": None, "related": []}
+        return {"event": None, "related": []}
+    related = [e for e in db.get_related_events(event_id) if e["id"] != event_id][:8]
+    return {"event": ev, "related": related}
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +381,7 @@ def _push_scan() -> None:
                 "url": e.get("url"),
             }
             for t in tokens:
-                threading.Thread(target=send_push, args=(t, payload, APNS), daemon=True).start()
+                _push_pool.submit(send_push, t, payload, APNS)
 
 
 def _lan_ip() -> str | None:

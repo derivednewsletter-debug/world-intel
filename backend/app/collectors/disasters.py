@@ -1,10 +1,11 @@
 """Disaster collectors — NASA EONET, USGS earthquakes, GDACS alerts (all keyless)."""
 import calendar
+import re
 import time
 
 import feedparser
 
-from ..db import set_source_status, upsert_event
+from ..db import set_source_status, upsert_events_batch
 from ..dedupe import compute_severity, event_id
 from ..fetch import fetch_json, fetch_text
 
@@ -27,7 +28,7 @@ EONET_CATEGORY_MAP = {
 
 def collect_eonet() -> int:
     data = fetch_json("https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=50")
-    n = 0
+    events = []
     for e in data.get("events") or []:
         coords = None
         for g in e.get("geometry") or []:
@@ -41,7 +42,7 @@ def collect_eonet() -> int:
         summary = e.get("description")
         if not summary and e.get("closed") is None:
             summary = "Active event (NASA EONET)"
-        ev = {
+        events.append({
             "id": event_id(e.get("title", ""), first_source or e.get("id", "")),
             "source": "eonet",
             "category": category,
@@ -51,10 +52,8 @@ def collect_eonet() -> int:
             "summary": summary,
             "published": published,
             "geo": {"lat": coords[1], "lon": coords[0], "place": e.get("title", "")} if coords else None,
-        }
-        if upsert_event(ev):
-            n += 1
-    return n
+        })
+    return upsert_events_batch(events)
 
 
 def _parse_date(s) -> int:
@@ -76,7 +75,7 @@ def collect_usgs() -> int:
         f"&starttime={quote(start)}&minmagnitude=4.5&orderby=time&limit=100"
     )
     data = fetch_json(url)
-    n = 0
+    events = []
     for f in data.get("features") or []:
         props = f.get("properties") or {}
         mag = props.get("mag") or 0
@@ -84,7 +83,7 @@ def collect_usgs() -> int:
         title = f"Earthquake M{mag:.1f} — {place}"
         base = 5 if mag >= 6 else 4 if mag >= 5.5 else 3 if mag >= 5 else 2
         coords = (f.get("geometry") or {}).get("coordinates") or []
-        ev = {
+        events.append({
             "id": event_id(title, props.get("url") or ""),
             "source": "usgs",
             "category": "disaster",
@@ -93,16 +92,14 @@ def collect_usgs() -> int:
             "url": props.get("url"),
             "published": props.get("time") or int(time.time() * 1000),
             "geo": {"lat": coords[1], "lon": coords[0], "place": place} if len(coords) >= 2 else None,
-        }
-        if upsert_event(ev):
-            n += 1
-    return n
+        })
+    return upsert_events_batch(events)
 
 
 def collect_gdacs() -> int:
     xml = fetch_text("https://www.gdacs.org/xml/rss.xml")
     feed = feedparser.parse(xml)
-    n = 0
+    events = []
     for entry in feed.entries:
         title = (entry.get("title") or "").strip()
         if not title:
@@ -112,7 +109,7 @@ def collect_gdacs() -> int:
         lat = _to_float(entry.get("geo_lat") or entry.get("geo:lat"))
         lon = _to_float(entry.get("geo_long") or entry.get("geo:long"))
         published = _parse_published(entry)
-        ev = {
+        events.append({
             "id": event_id(title, entry.get("link") or ""),
             "source": "gdacs",
             "category": "disaster",
@@ -122,10 +119,8 @@ def collect_gdacs() -> int:
             "summary": _plain(entry.get("summary") or ""),
             "published": published,
             "geo": {"lat": lat, "lon": lon} if lat is not None and lon is not None else None,
-        }
-        if upsert_event(ev):
-            n += 1
-    return n
+        })
+    return upsert_events_batch(events)
 
 
 def _to_float(v) -> float | None:
@@ -147,7 +142,6 @@ def _parse_published(entry) -> int:
 
 
 def _plain(raw) -> str | None:
-    import re
     if not raw:
         return None
     if isinstance(raw, list):

@@ -6,7 +6,7 @@ import time
 import feedparser
 
 from ..config import ALL_RSS_SOURCES
-from ..db import set_source_status, upsert_event
+from ..db import set_source_status, upsert_events_batch
 from ..dedupe import compute_severity, event_id, refine_category
 from ..fetch import fetch_text
 
@@ -96,13 +96,13 @@ def collect_feed(src: dict) -> int:
         headers = {"User-Agent": _REDDIT_UA}
     xml = fetch_text(src["url"], headers=headers)
     feed = feedparser.parse(xml)
-    n = 0
+    events = []
     for entry in feed.entries:
         title = (entry.get("title") or "").strip()
         if not title:
             continue
         link = entry.get("link")
-        ev = {
+        events.append({
             "id": event_id(title, link or ""),
             "source": src["name"],
             "category": refine_category(src["category"], title),
@@ -112,10 +112,8 @@ def collect_feed(src: dict) -> int:
             "summary": _plain_summary(entry),
             "image": _extract_image(entry),
             "published": _parse_published(entry),
-        }
-        if upsert_event(ev):
-            n += 1
-    return n
+        })
+    return upsert_events_batch(events)
 
 
 def run_rss() -> None:

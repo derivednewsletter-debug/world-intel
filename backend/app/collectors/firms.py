@@ -10,7 +10,7 @@ import time
 from urllib.parse import quote
 
 from ..config import FIRMS_API_KEY
-from ..db import set_source_status, upsert_event
+from ..db import set_source_status, upsert_events_batch
 from ..dedupe import compute_severity, event_id
 from ..fetch import fetch_text
 
@@ -94,12 +94,12 @@ def collect_firms() -> int:
             cell["day"] = p["day"]
 
     top = sorted(cells.values(), key=lambda c: c["n"], reverse=True)[:15]
-    n = 0
+    events = []
     for c in top:
         title = f"🔥 Fire cluster near ({c['lat']:.1f}°, {c['lon']:.1f}°) — {c['n']} active hotspot(s)"
         base = 4 if c["n"] >= 10 else 3 if c["n"] >= 4 else 2
         day = f" · {c['day']}" if c["day"] else ""
-        ev = {
+        events.append({
             "id": event_id(title, f"{c['lat']},{c['lon']}"),
             "source": "firms",
             "category": "disaster",
@@ -108,10 +108,8 @@ def collect_firms() -> int:
             "summary": f"Satellite fire detection (NASA FIRMS) · max FRP {c['max_frp']:.0f} MW{day}",
             "published": int(time.time() * 1000),
             "geo": {"lat": c["lat"] + 0.5, "lon": c["lon"] + 0.5, "place": f"{c['lat']:.1f}°, {c['lon']:.1f}°"},
-        }
-        if upsert_event(ev):
-            n += 1
-    return n
+        })
+    return upsert_events_batch(events)
 
 
 def run_firms() -> None:

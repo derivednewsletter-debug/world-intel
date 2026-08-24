@@ -20,6 +20,11 @@ class HttpError(Exception):
         self.status = status
 
 
+class JsonDecodeError(Exception):
+    """Raised when a response isn't valid JSON — includes the URL for debugging."""
+    pass
+
+
 def fetch_text(url: str, timeout_ms: int = 20000, headers: dict | None = None) -> str:
     def _attempt() -> str:
         res = _client.get(url, timeout=timeout_ms / 1000, headers=headers)
@@ -42,7 +47,11 @@ def fetch_text(url: str, timeout_ms: int = 20000, headers: dict | None = None) -
 
 
 def fetch_json(url: str, timeout_ms: int = 20000, headers: dict | None = None):
-    return json.loads(fetch_text(url, timeout_ms, headers))
+    raw = fetch_text(url, timeout_ms, headers)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as err:
+        raise JsonDecodeError(f"Invalid JSON from {url}: {err}") from err
 
 
 def sleep(ms: float) -> None:

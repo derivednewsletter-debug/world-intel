@@ -103,3 +103,40 @@ def compute_stress(events: list, indicators=None, watch_count: int = 0, hours: i
         "history": history,
         "hours": hours,
     }
+
+
+def compute_stress_compare(events: list, indicators=None, watch_count: int = 0,
+                           hours: int = 24) -> dict:
+    """Compare this period's stress vs the same period last week.
+
+    Returns the current stress, last week's stress, and a delta.
+    """
+    now_ms = time.time() * 1000
+    week_ms = 7 * 24 * 3_600_000
+
+    # Current period.
+    current_events = [e for e in events if (e.get("published") or 0) >= now_ms - hours * 3_600_000]
+    current = compute_stress(current_events, indicators, watch_count=watch_count, hours=hours)
+
+    # Last week's period (same hours, shifted back 7 days).
+    last_week_events = [
+        e for e in events
+        if (e.get("published") or 0) >= now_ms - week_ms - hours * 3_600_000
+        and (e.get("published") or 0) < now_ms - week_ms
+    ]
+    last_week = compute_stress(last_week_events, indicators=[], watch_count=0, hours=hours)
+
+    delta = current["score"] - last_week["score"]
+    if delta > 5:
+        trend = "worse"
+    elif delta < -5:
+        trend = "better"
+    else:
+        trend = "stable"
+
+    return {
+        "current": current,
+        "last_week": last_week,
+        "delta": round(delta),
+        "trend": trend,
+    }

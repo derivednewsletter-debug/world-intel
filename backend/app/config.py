@@ -78,6 +78,7 @@ SCHEDULE = {
     "spaceweather": "*/15 * * * *",  # NOAA SWPC solar/geomagnetic alerts
     "watch": "*/5 * * * *",  # dynamic Google News feed from your watchlist
     "money": "*/10 * * * *",  # FX + crypto
+    "who_outbreak": "*/15 * * * *",  # WHO Disease Outbreak News
 }
 
 

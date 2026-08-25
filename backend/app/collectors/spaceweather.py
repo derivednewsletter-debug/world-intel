@@ -4,12 +4,11 @@ Keyless JSON feed (services.swpc.noaa.gov/products/alerts.json). Alerts carry a
 message type (Warning > Alert > Watch > Summary) and a short technical message.
 Events land in the weather category so they show on the map/weather tabs.
 """
-import time
-
 from ..db import set_source_status, upsert_events_batch
 from ..dedupe import compute_severity, event_id
 from ..eventhub import hub
 from ..fetch import fetch_json
+from ..util import parse_iso
 
 _ALERTS_URL = "https://services.swpc.noaa.gov/products/alerts.json"
 
@@ -22,16 +21,6 @@ _TYPE_SEVERITY = {
 }
 
 MAX_ALERTS = 40
-
-
-def _parse_iso(s: str) -> int:
-    if not s:
-        return int(time.time() * 1000)
-    try:
-        from datetime import datetime
-        return int(datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp() * 1000)
-    except (ValueError, OverflowError):
-        return int(time.time() * 1000)
 
 
 def _first_line(s: str) -> str:
@@ -67,7 +56,7 @@ def collect_spaceweather() -> int:
             "title": title,
             "url": "https://www.swpc.noaa.gov/",
             "summary": message[:500] or None,
-            "published": _parse_iso(a.get("issue_datetime")),
+            "published": parse_iso(a.get("issue_datetime")),
             "geo": None,
         })
     n, inserted = upsert_events_batch(events)

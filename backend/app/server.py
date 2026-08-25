@@ -19,13 +19,17 @@ from starlette.middleware.cors import CORSMiddleware
 from . import db, watchlist
 from .ai.engine import (STOPWORDS, cluster_events, detect_spikes, generate_briefing,
                         generate_world_summary, watch_alerts, watch_term_stats)
-from .ai.stress import compute_stress
-from .collectors import run_all
+from .ai.correlations import find_correlations
+from .ai.sentiment import sentiment_history
+from .ai.stress import compute_stress, compute_stress_compare
 from concurrent.futures import ThreadPoolExecutor
+from .collectors import run_all
 from .eventhub import hub
 
 from .config import APNS, CATEGORIES, HOST, LIVE_STREAMS, PORT
 from .push.apns import send_push
+from .push.webhooks import get_config as get_webhook_config, save_config as save_webhook_config, send_webhook_batch
+from .push.email_digest import get_config as get_email_config, save_config as save_email_config, send_digest
 from .scheduler import start_scheduler, stop_scheduler
 
 APP_VERSION = "0.3.0"
@@ -61,13 +65,14 @@ def _boot_collect() -> None:
     """Run all collectors at boot, updating progress as each group finishes."""
     try:
         from .collectors import (run_rss, run_disasters, run_fred, run_firms,
-                                 run_weather, run_spaceweather, run_watch_feed, run_money)
+                                 run_weather, run_spaceweather, run_watch_feed, run_money,
+                                 run_who_outbreak)
         from .collectors.gdelt import run_gdelt_doc, run_gdelt_points
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import as_completed
 
         # Phase 1: Fast sources in parallel (RSS, weather, disasters, money, etc.)
         fast_jobs = [run_rss, run_disasters, run_weather, run_spaceweather,
-                     run_watch_feed, run_money]
+                     run_watch_feed, run_money, run_who_outbreak]
         with ThreadPoolExecutor(max_workers=6) as ex:
             futures = {ex.submit(fn): fn.__name__ for fn in fast_jobs}
             done = 0
@@ -409,6 +414,33 @@ async def api_stress(request: Request):
     return compute_stress(events, db.get_indicators(), watch_count=watch_count, hours=hours)
 
 
+@app.get("/api/ai/correlations")
+async def api_correlations(request: Request):
+    """Find patterns between economic indicators and event categories."""
+    hours = _hours_param(request)
+    events = db.get_all_events_since(int(time.time() * 1000) - hours * 3_600_000)
+    indicators = db.get_indicators()
+    return {"hours": hours, "correlations": find_correlations(events, indicators, hours)}
+
+
+@app.get("/api/sentiment/history")
+async def api_sentiment_history(request: Request):
+    """Per-hour sentiment trend over the last N hours."""
+    hours = _hours_param(request)
+    events = db.get_all_events_since(int(time.time() * 1000) - hours * 3_600_000)
+    return {"hours": hours, "history": sentiment_history(events, hours)}
+
+
+@app.get("/api/stress/compare")
+async def api_stress_compare(request: Request):
+    """Compare this week's stress vs last week — are things getting worse?"""
+    hours = _hours_param(request)
+    events = db.get_all_events_since(int(time.time() * 1000) - (hours + 7 * 24) * 3_600_000)
+    wl = watchlist.effective_watchlist()
+    watch_count = len(watch_alerts(events, wl))
+    return compute_stress_compare(events, db.get_indicators(), watch_count=watch_count, hours=hours)
+
+
 @app.get("/api/event/{event_id}")
 async def api_event(event_id: str):
     """One event + related events by title similarity (for detail modal + timelines)."""
@@ -452,6 +484,92 @@ async def push_test():
         if send_push(t, payload, APNS):
             sent += 1
     return {"ok": True, "sent": sent, "total": len(tokens)}
+
+
+@app.get("/api/config/export")
+async def api_config_export():
+    """Export all user configuration as JSON (backup/restore)."""
+    from .push.webhooks import get_config as wh_cfg
+    from .push.email_digest import get_config as em_cfg
+    return {
+        "version": APP_VERSION,
+        "watchlist": watchlist.effective_watchlist(),
+        "webhook": wh_cfg(),
+        "email": em_cfg(),
+    }
+
+
+@app.put("/api/config/import")
+async def api_config_import(request: Request):
+    """Import configuration from a JSON export."""
+    body = await _json_body(request)
+    imported = []
+    if "watchlist" in body:
+        wl = body["watchlist"]
+        watchlist.save_watchlist(
+            wl.get("countries", []),
+            wl.get("keywords", []),
+            wl.get("min_severity"),
+        )
+        imported.append("watchlist")
+    if "webhook" in body:
+        from .push.webhooks import save_config as wh_save
+        wh = body["webhook"]
+        wh_save(
+            url=wh.get("url"),
+            enabled=wh.get("enabled"),
+            categories=wh.get("categories"),
+            min_severity=wh.get("min_severity"),
+        )
+        imported.append("webhook")
+    if "email" in body:
+        from .push.email_digest import save_config as em_save
+        em = body["email"]
+        em_save(**{k: v for k, v in em.items() if v is not None})
+        imported.append("email")
+    return {"ok": True, "imported": imported}
+
+
+@app.get("/api/email")
+async def api_get_email():
+    return get_email_config()
+
+
+@app.put("/api/email")
+async def api_put_email(request: Request):
+    body = await _json_body(request)
+    return save_email_config(**{k: v for k, v in body.items() if v is not None})
+
+
+@app.post("/api/email/test")
+async def api_email_test():
+    """Send a test digest email."""
+    hours = 24
+    events = db.get_all_events_since(int(time.time() * 1000) - hours * 3_600_000)
+    briefing = generate_briefing(events, hours)
+    wl = watchlist.effective_watchlist()
+    watch_count = len(watch_alerts(events, wl))
+    stress = compute_stress(events, db.get_indicators(), watch_count=watch_count, hours=hours)
+    from .ai.sentiment import score_events
+    sentiment = score_events(events)
+    ok = send_digest(briefing, stress, sentiment)
+    return {"ok": ok}
+
+
+@app.get("/api/webhook")
+async def api_get_webhook():
+    return get_webhook_config()
+
+
+@app.put("/api/webhook")
+async def api_put_webhook(request: Request):
+    body = await _json_body(request)
+    return save_webhook_config(
+        url=body.get("url"),
+        enabled=body.get("enabled"),
+        categories=body.get("categories"),
+        min_severity=body.get("min_severity"),
+    )
 
 
 @app.get("/api/search")
@@ -573,15 +691,18 @@ def _push_scan() -> None:
             }
             for t in tokens:
                 _push_pool.submit(send_push, t, payload, APNS)
+        # Also send to webhook if configured.
+        try:
+            send_webhook_batch(majors + [w["event"] for w in watch])
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _lan_ip() -> str | None:
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
     except Exception:  # noqa: BLE001
         return None
 

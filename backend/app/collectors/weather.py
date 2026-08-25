@@ -5,13 +5,11 @@ Their API requires a descriptive User-Agent, which fetch.py already sends.
 Only alerts that are actually in effect (`status=actual`) are collected, and the
 run is capped at the most severe alerts so the feed doesn't flood.
 """
-import time
-from urllib.parse import quote
-
 from ..db import set_source_status, upsert_events_batch
 from ..dedupe import compute_severity, event_id
 from ..eventhub import hub
 from ..fetch import fetch_json
+from ..util import parse_iso
 
 _ALERTS_URL = "https://api.weather.gov/alerts/active?status=actual"
 
@@ -62,7 +60,7 @@ def collect_weather() -> int:
             geo = _centroid(geometry["coordinates"][0])
         elif geometry.get("type") == "MultiPolygon" and geometry.get("coordinates"):
             geo = _centroid(geometry["coordinates"][0][0])
-        published = _parse_iso(p.get("sent") or p.get("effective"))
+        published = parse_iso(p.get("sent") or p.get("effective"))
         headline = p.get("headline") or title
         description = p.get("description") or ""
         summary = _clean(headline if len(headline) <= 200 else description[:400])
@@ -82,17 +80,6 @@ def collect_weather() -> int:
     if inserted:
         hub.publish_batch(inserted)
     return n
-
-
-def _parse_iso(s) -> int:
-    if not s:
-        return int(time.time() * 1000)
-    try:
-        from datetime import datetime
-        # "2026-08-22T18:32:00-04:00" (fromisoformat handles the offset)
-        return int(datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp() * 1000)
-    except (ValueError, OverflowError):
-        return int(time.time() * 1000)
 
 
 def run_weather() -> None:

@@ -1,6 +1,5 @@
 """Disaster collectors — NASA EONET, USGS earthquakes, GDACS alerts (all keyless)."""
 import calendar
-import re
 import time
 
 import feedparser
@@ -9,6 +8,7 @@ from ..db import set_source_status, upsert_events_batch
 from ..dedupe import compute_severity, event_id
 from ..eventhub import hub
 from ..fetch import fetch_json, fetch_text
+from ..util import parse_published, strip_html, to_float
 
 EONET_CATEGORY_MAP = {
     "severeStorms": "weather",
@@ -38,7 +38,7 @@ def collect_eonet() -> int:
                 break
         geo_date = (e.get("geometry") or [{}])[0].get("date")
         first_source = (e.get("sources") or [{}])[0].get("url")
-        published = _parse_date(geo_date)
+        published = _parse_date(geo_date)  # EONET has custom date format
         category = EONET_CATEGORY_MAP.get((e.get("categories") or [{}])[0].get("id", ""), "disaster")
         summary = e.get("description")
         if not summary and e.get("closed") is None:
@@ -113,9 +113,9 @@ def collect_gdacs() -> int:
             continue
         lower = title.lower()
         level = 4 if "red alert" in lower else 3 if "orange alert" in lower else 2 if "green alert" in lower else 1
-        lat = _to_float(entry.get("geo_lat") or entry.get("geo:lat"))
-        lon = _to_float(entry.get("geo_long") or entry.get("geo:long"))
-        published = _parse_published(entry)
+        lat = to_float(entry.get("geo_lat") or entry.get("geo:lat"))
+        lon = to_float(entry.get("geo_long") or entry.get("geo:long"))
+        published = parse_published(entry)
         events.append({
             "id": event_id(title, entry.get("link") or ""),
             "source": "gdacs",
@@ -123,7 +123,7 @@ def collect_gdacs() -> int:
             "severity": compute_severity(level, title),
             "title": title,
             "url": entry.get("link"),
-            "summary": _plain(entry.get("summary") or ""),
+            "summary": strip_html(entry.get("summary") or ""),
             "published": published,
             "geo": {"lat": lat, "lon": lon} if lat is not None and lon is not None else None,
         })
@@ -132,31 +132,6 @@ def collect_gdacs() -> int:
         hub.publish_batch(inserted)
     return n
 
-
-def _to_float(v) -> float | None:
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return None
-
-
-def _parse_published(entry) -> int:
-    for key in ("published_parsed", "updated_parsed"):
-        t = entry.get(key)
-        if t:
-            try:
-                return int(calendar.timegm(t) * 1000)
-            except (ValueError, OverflowError, TypeError):
-                pass
-    return int(time.time() * 1000)
-
-
-def _plain(raw) -> str | None:
-    if not raw:
-        return None
-    if isinstance(raw, list):
-        raw = "".join(x.get("value", "") for x in raw if isinstance(x, dict))
-    return re.sub(r"<[^>]+>", " ", raw).strip()[:500] or None
 
 
 def run_disasters() -> None:

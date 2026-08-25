@@ -8,6 +8,7 @@ from ..config import GDELT_DOC_QUERIES, GDELT_EVENT_QUERY
 from ..db import is_in_cooldown, set_cooldown, set_source_status, upsert_event
 from ..dedupe import compute_severity, event_id, refine_category
 from ..fetch import HttpError, fetch_text, sleep
+from ..util import to_float
 
 DOC_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 
@@ -59,13 +60,6 @@ def _parse_seendate(s: str) -> int:
         return int(time.time() * 1000)
 
 
-def _to_float(v) -> float | None:
-    try:
-        f = float(v)
-        return f
-    except (TypeError, ValueError):
-        return None
-
 
 def collect_doc_query(name: str, query: str, category: str) -> int:
     url = (
@@ -79,7 +73,7 @@ def collect_doc_query(name: str, query: str, category: str) -> int:
         title = (a.get("title") or "").strip()
         if not title:
             continue
-        tone = _to_float(a.get("tone"))
+        tone = to_float(a.get("tone"))
         base = 1 + min(2, round(-tone / 5)) if tone is not None and tone < 0 else 1
         domain = a.get("domain") or ""
         summary = None
@@ -131,11 +125,11 @@ def collect_point_data() -> int:
     n = 0
     for p in points:
         title = (p.get("title") or p.get("name") or "Event").strip()
-        lat = _to_float(p.get("lat", p.get("lat_")))
-        lon = _to_float(p.get("lon", p.get("lon_")))
+        lat = to_float(p.get("lat", p.get("lat_")))
+        lon = to_float(p.get("lon", p.get("lon_")))
         if lat is None or lon is None:
             continue
-        tone = _to_float(p.get("tone"))
+        tone = to_float(p.get("tone"))
         base = 2 + min(2, round(-tone / 4)) if tone is not None and tone < 0 else 2
         ev = {
             "id": event_id(title, p.get("url") or f"{lat},{lon}"),

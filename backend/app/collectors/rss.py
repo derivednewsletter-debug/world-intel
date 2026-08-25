@@ -1,5 +1,4 @@
 """RSS/Atom collectors — direct publisher feeds + Google News topic/site/search feeds."""
-import calendar
 import re
 import time
 
@@ -10,9 +9,9 @@ from ..db import set_source_status, upsert_events_batch
 from ..dedupe import compute_severity, event_id, refine_category
 from ..eventhub import hub
 from ..fetch import fetch_text
+from ..util import parse_published, strip_html
 
 _IMG_TAG = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.I)
-_HTML_TAG = re.compile(r"<[^>]+>")
 
 # Reddit blocks generic bot UAs — a browser UA dramatically reduces 429s.
 _REDDIT_UA = (
@@ -66,26 +65,6 @@ def _extract_image(entry) -> str | None:
     return m.group(1) if m else None
 
 
-def _parse_published(entry) -> int:
-    for key in ("published_parsed", "updated_parsed"):
-        t = entry.get(key)
-        if t:
-            try:
-                return int(calendar.timegm(t) * 1000)
-            except (ValueError, OverflowError, TypeError):
-                pass
-    return int(time.time() * 1000)
-
-
-def _plain_summary(entry) -> str | None:
-    raw = entry.get("summary") or ""
-    if isinstance(raw, list):
-        raw = "".join(x.get("value", "") for x in raw if isinstance(x, dict))
-    if not raw:
-        return None
-    return _HTML_TAG.sub(" ", raw).strip()[:500] or None
-
-
 def collect_feed_url(name: str, url: str, category: str) -> int:
     """Collect a single feed by name/url — used by the dynamic watchlist feed."""
     return collect_feed({"name": name, "url": url, "category": category})
@@ -110,9 +89,9 @@ def collect_feed(src: dict) -> int:
             "severity": compute_severity(1, title),
             "title": title,
             "url": link,
-            "summary": _plain_summary(entry),
+            "summary": strip_html(entry.get("summary") or ""),
             "image": _extract_image(entry),
-            "published": _parse_published(entry),
+            "published": parse_published(entry),
         })
     n, inserted = upsert_events_batch(events)
     if inserted:

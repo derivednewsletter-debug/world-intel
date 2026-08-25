@@ -8,6 +8,22 @@ except ImportError:
     spaceweather = None  # feedparser not installed — skip these tests
 
 
+def _make_fake_batch():
+    """Return a side-effect function for upsert_events_batch.
+
+    Mimics the real signature: takes a list of events, returns
+    ``(count, inserted_list)`` — matching db.upsert_events_batch.
+    """
+    seen = {}
+
+    def _side_effect(events):
+        for ev in events:
+            seen[ev["title"]] = ev
+        return len(events), events
+
+    return seen, _side_effect
+
+
 @unittest.skipUnless(spaceweather, "feedparser not installed")
 class SpaceWeatherTest(unittest.TestCase):
     def _fake_payload(self):
@@ -33,31 +49,23 @@ class SpaceWeatherTest(unittest.TestCase):
         ]
 
     def test_warning_outranks_alert_outranks_summary(self):
-        seen = {}
-
-        def fake_upsert(ev):
-            seen[ev["title"]] = ev["severity"]
-            return True
-
+        seen, side_effect = _make_fake_batch()
         with patch.object(spaceweather, "fetch_json", return_value=self._fake_payload()), \
-             patch.object(spaceweather, "upsert_event", side_effect=fake_upsert):
+             patch.object(spaceweather, "upsert_events_batch", side_effect=side_effect), \
+             patch.object(spaceweather, "hub"):
             n = spaceweather.collect_spaceweather()
         self.assertEqual(n, 3)
         warn = next(t for t in seen if "warning" in t)
         alert = next(t for t in seen if "alert" in t)
         summary = next(t for t in seen if "summary" in t)
-        self.assertGreater(seen[warn], seen[alert])
-        self.assertGreater(seen[alert], seen[summary])
+        self.assertGreater(seen[warn]["severity"], seen[alert]["severity"])
+        self.assertGreater(seen[alert]["severity"], seen[summary]["severity"])
 
     def test_first_line_becomes_headline(self):
-        seen = {}
-
-        def fake_upsert(ev):
-            seen[ev["title"]] = ev
-            return True
-
+        seen, side_effect = _make_fake_batch()
         with patch.object(spaceweather, "fetch_json", return_value=self._fake_payload()), \
-             patch.object(spaceweather, "upsert_event", side_effect=fake_upsert):
+             patch.object(spaceweather, "upsert_events_batch", side_effect=side_effect), \
+             patch.object(spaceweather, "hub"):
             spaceweather.collect_spaceweather()
         warn = next(ev for ev in seen.values() if "warning" in ev["title"])
         self.assertIn("G3 (Strong) Geomagnetic Storm Imminent", warn["title"])
@@ -66,10 +74,11 @@ class SpaceWeatherTest(unittest.TestCase):
 
     def test_bad_payload_is_ignored(self):
         with patch.object(spaceweather, "fetch_json", return_value={"not": "a list"}), \
-             patch.object(spaceweather, "upsert_event", return_value=True) as upsert:
+             patch.object(spaceweather, "upsert_events_batch") as batch_mock, \
+             patch.object(spaceweather, "hub"):
             n = spaceweather.collect_spaceweather()
         self.assertEqual(n, 0)
-        upsert.assert_not_called()
+        batch_mock.assert_not_called()
 
 
 if __name__ == "__main__":

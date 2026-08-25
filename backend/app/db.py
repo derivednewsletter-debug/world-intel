@@ -4,7 +4,7 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from .config import DB_PATH, RETENTION_DAYS
 from .dedupe import normalize_title
@@ -181,11 +181,12 @@ def upsert_events_batch(events: list[dict]) -> tuple[int, list[dict]]:
     n = 0
     inserted = []
     with c:
-        # Fetch all existing norms in one shot for dedup.
+        # Fetch existing norms for dedup — cap at 5000 to bound memory on busy days.
         existing = {
             row[0]
             for row in c.execute(
-                "SELECT title_norm FROM events WHERE published >= ?", (cutoff,)
+                "SELECT DISTINCT title_norm FROM events WHERE published >= ? LIMIT 5000",
+                (cutoff,)
             ).fetchall()
         }
         for ev in events:
@@ -281,22 +282,20 @@ def count_events_by_category() -> dict:
 
 
 def get_activity_buckets(since_ms: int, hours: int) -> list:
-    """Events per hour bucket using SQL — avoids fetching all events into Python.
+    """Events per hour bucket using SQL GROUP BY — no Python-side iteration.
     Returns a list of {hour: <epoch_ms>, count: <int>} dicts."""
     c = _conn()
-    # SQLite's strftime works on epoch seconds, not ms.
+    # SQLite's datetime() works on epoch seconds, so truncate ms → sec.
     since_sec = since_ms // 1000
-    bucket_size = 3600  # 1 hour in seconds
     rows = c.execute(
-        "SELECT (published / 1000) AS ts FROM events WHERE published >= ?",
-        (since_ms,),
+        """SELECT (CAST((published / 1000 - ?) / 3600 AS INTEGER)) AS bucket,
+                  COUNT(*) AS cnt
+           FROM events WHERE published >= ?
+           GROUP BY bucket""",
+        (since_sec, since_ms),
     ).fetchall()
-    buckets = {h: 0 for h in range(hours)}
-    for row in rows:
-        ts = row["ts"]
-        idx = min(hours - 1, max(0, (ts - since_sec) // bucket_size))
-        buckets[idx] += 1
-    return [{"hour": since_ms + h * 3_600_000, "count": buckets[h]} for h in range(hours)]
+    buckets = {r["bucket"]: r["cnt"] for r in rows}
+    return [{"hour": since_ms + h * 3_600_000, "count": buckets.get(h, 0)} for h in range(hours)]
 
 
 def get_event(event_id: str) -> Optional[dict]:

@@ -4,6 +4,8 @@ import math
 import re
 import time
 
+from .sentiment import score_events, score_text
+
 STOPWORDS = {
     "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with", "at", "by", "from", "as",
     "is", "are", "was", "were", "be", "been", "has", "have", "had", "will", "would", "could", "should",
@@ -17,13 +19,6 @@ STOPWORDS = {
 
 def tokenize(text: str) -> list:
     return [t for t in re.sub(r"[^a-z0-9 ]+", " ", text.lower()).split() if len(t) > 3 and t not in STOPWORDS]
-
-
-def jaccard(a: set, b: set) -> float:
-    if not a or not b:
-        return 0.0
-    inter = len(a & b)
-    return inter / (len(a) + len(b) - inter)
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +79,11 @@ def cluster_events(events: list) -> list:
                            "url": e.get("url"), "severity": e["severity"]}
                           for e in sorted(evs, key=lambda e: e["published"])][:20],
         })
+    # Attach sentiment to each cluster.
+    for c in out:
+        samples = c.get("sample", [])
+        text = " ".join(f"{e.get('title', '')} {e.get('summary') or ''}" for e in samples)
+        c["sentiment"] = score_text(text)
     return sorted(out, key=score_cluster, reverse=True)
 
 
@@ -245,7 +245,12 @@ def generate_briefing(events: list, hours: int = 24) -> dict:
         headline = clusters[0]["title"]
     else:
         headline = "No major developments in the last 24 hours."
-    return {"generated": int(time.time() * 1000), "headline": headline, "sections": sections}
+
+    # Overall sentiment for the briefing window.
+    overall_sentiment = score_events(recent)
+
+    return {"generated": int(time.time() * 1000), "headline": headline, "sections": sections,
+            "sentiment": overall_sentiment}
 
 
 # ---------------------------------------------------------------------------
@@ -320,5 +325,8 @@ def generate_world_summary(events: list, hours: int = 24) -> dict:
     if clusters:
         opening += f" The single most important story right now is: {clusters[0]['title']}"
 
+    overall_sentiment = score_events(recent)
+
     return {"generated": int(time.time() * 1000), "hours": hours, "opening": opening,
-            "regions": regions, "categories": categories}
+            "regions": regions, "categories": categories,
+            "sentiment": overall_sentiment}

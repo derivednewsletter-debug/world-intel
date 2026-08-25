@@ -10,22 +10,13 @@ from .rss import run_rss
 from .spaceweather import run_spaceweather
 from .watch_feed import run_watch_feed
 from .weather import run_weather
+from .who_outbreak import run_who_outbreak
 
 __all__ = [
     "run_rss", "run_gdelt_doc", "run_gdelt_points", "run_disasters",
-    "run_fred", "run_firms", "run_weather", "run_spaceweather", "run_watch_feed", "run_money", "run_all",
+    "run_fred", "run_firms", "run_weather", "run_spaceweather", "run_watch_feed", "run_money",
+    "run_who_outbreak", "run_all",
 ]
-
-
-def _publish_new_events(inserted: list) -> None:
-    """Publish newly inserted events to the real-time SSE hub."""
-    if not inserted:
-        return
-    try:
-        from ..eventhub import hub
-        hub.publish_batch(inserted)
-    except Exception:  # noqa: BLE001
-        pass
 
 
 def run_all() -> None:
@@ -35,7 +26,7 @@ def run_all() -> None:
     Each collector publishes new events to the SSE hub for real-time push.
     """
     _fast = [run_rss, run_disasters, run_weather, run_spaceweather,
-             run_watch_feed, run_money]
+             run_watch_feed, run_money, run_who_outbreak]
     _key = [run_fred, run_firms]
     with ThreadPoolExecutor(max_workers=8) as ex:
         futures = [ex.submit(fn) for fn in _fast + _key]

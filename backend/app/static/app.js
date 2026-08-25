@@ -28,7 +28,9 @@ const TABS = [
   { id: "supplychain", label: "Supply Chain" },
   { id: "markets", label: "Markets" },
   { id: "watch", label: "Watch Live" },
+  { id: "health", label: "Health" },
   { id: "search", label: "Search" },
+  { id: "settings", label: "Settings" },
 ];
 
 const state = {
@@ -39,11 +41,14 @@ const state = {
   statsFailed: false,
   feed: { events: [], total: 0, offset: 0, cats: new Set(), majorOnly: false, trends: { words: [], bigrams: [] }, spikes: [], trendQuery: null, updated: null, loading: true, error: false },
   briefing: { briefing: null, summary: null, stories: [], watch: null, activity: null, wl: { countries: [], keywords: [], min_severity: 3 }, updated: null, wlSaved: null },
+  webhook: null,
   notify: { enabled: false, firstRun: localStorage.getItem("wiSeen") === null, seenIds: new Set(JSON.parse(localStorage.getItem("wiSeen") || "[]")) },
   map: { events: [], hidden: new Set(), map: null, layer: null, built: false, updated: null },
   disasters: { events: [], updated: null },
   supply: { indicators: [], events: [], updated: null },
   markets: { indicators: [], events: [], updated: null },
+  health: { events: [], updated: null },
+  settings: { webhook: null, email: null, watchlist: null, health: null, updated: null },
   stress: null,
   streams: [],
 };
@@ -269,7 +274,9 @@ function refreshTab(id) {
   else if (id === "supplychain") loadSupply();
   else if (id === "markets") loadMarkets();
   else if (id === "watch") loadWatch();
+  else if (id === "health") loadHealth();
   else if (id === "search") renderSearch();
+  else if (id === "settings") loadSettings();
 }
 
 // ---------------------------------------------------------------------------
@@ -528,7 +535,7 @@ function renderFeed() {
 async function loadBriefing() {
   const b = state.briefing;
   try {
-    const [br, su, st, wa, act, wl, stress] = await Promise.all([
+    const [br, su, st, wa, act, wl, stress, sentHist, whCfg] = await Promise.all([
       api("/api/ai/briefing"),
       api("/api/ai/summary"),
       api("/api/ai/stories?limit=12"),
@@ -536,6 +543,8 @@ async function loadBriefing() {
       api("/api/activity?hours=24"),
       api("/api/watchlist"),
       api("/api/stress?hours=24"),
+      api("/api/sentiment/history?hours=24"),
+      api("/api/webhook"),
     ]);
     b.briefing = br;
     b.summary = su;
@@ -544,6 +553,8 @@ async function loadBriefing() {
     b.activity = act;
     b.wl = wl;
     b.stress = stress;
+    b.sentimentHistory = sentHist;
+    state.webhook = whCfg;
     b.updated = Date.now();
     renderBriefing();
   } catch (e) {}
@@ -569,6 +580,7 @@ function renderBriefing() {
   head.appendChild(el("h2", { style: "margin:8px 0 0" }, b.briefing.headline));
   main.appendChild(head);
   main.appendChild(renderStressPanel());
+  main.appendChild(renderSentimentPanel());
 
   if (b.summary) {
     const panel = el("div", { class: "panel", style: "margin-bottom:14px" });
@@ -601,6 +613,7 @@ function renderBriefing() {
 
   main.appendChild(renderActivity());
   main.appendChild(renderWatchlistPanel());
+  main.appendChild(renderWebhookPanel());
 
   for (const sec of b.briefing.sections) {
     const wrap = el("div", { style: "margin-bottom:14px" });
@@ -651,8 +664,9 @@ function renderBriefing() {
     for (const s of b.stories) {
       const box = el("div", { class: "indicator", style: "cursor:pointer" });
       box.appendChild(el("div", { class: "top" }, el("span", { class: "name" }, s.title)));
+      const sentBadge = s.sentiment ? " · " + (s.sentiment.label === "positive" ? "🟢 " : s.sentiment.label === "negative" ? "🔴 " : "⚪ ") + s.sentiment.label : "";
       box.appendChild(el("div", { class: "summary", style: "margin-top:4px" },
-        s.count + " update(s) · " + s.sources.length + " source(s) · severity " + s.severity + "/5" + (s.momentum > 0.3 ? " · 📈 accelerating" : "") + " · click for timeline"));
+        s.count + " update(s) · " + s.sources.length + " source(s) · severity " + s.severity + "/5" + (s.momentum > 0.3 ? " · 📈 accelerating" : "") + sentBadge + " · click for timeline"));
       box.appendChild(el("div", { class: "summary", style: "color:#8b93a7;font-size:11px" }, s.sources.slice(0, 6).join(", ")));
       const tl = el("div", { style: "display:none;margin-top:8px;border-top:1px solid var(--border);padding-top:6px" });
       for (const t of (s.timeline || [])) {
@@ -858,13 +872,15 @@ function renderSupply() {
 
 async function loadMarkets() {
   try {
-    const [i, m, en] = await Promise.all([
+    const [i, m, en, corr] = await Promise.all([
       api("/api/indicators"),
       api("/api/events?category=markets&limit=80"),
       api("/api/events?category=energy&limit=60"),
+      api("/api/ai/correlations?hours=24"),
     ]);
     state.markets.indicators = i.indicators.filter((x) => x.category === "markets" || x.category === "energy" || x.category === "money");
     state.markets.events = m.events.concat(en.events).sort((a, b) => b.published - a.published);
+    state.markets.correlations = corr.correlations || [];
     state.markets.updated = Date.now();
     renderMarkets();
   } catch (e) {}
@@ -909,6 +925,40 @@ function renderMarkets() {
     }
     main.appendChild(mgrid);
   }
+  // Correlations panel
+  const corrs = s.correlations || [];
+  if (corrs.length) {
+    const panel = el("div", { class: "panel", style: "margin-bottom:14px" });
+    panel.appendChild(el("div", { class: "meta" },
+      el("span", { class: "cat", style: "background:#faad1422;color:#faad14" }, "Market ↔ Event Correlations"),
+      el("span", { class: "src" }, "Pearson correlation · top patterns found")));
+    const table = el("table", { class: "health-table" });
+    const thead = el("thead");
+    const trh = el("tr");
+    for (const h of ["Indicator", "Event category", "Correlation", "Direction", "Insight"]) trh.appendChild(el("th", {}, h));
+    thead.appendChild(trh);
+    table.appendChild(thead);
+    const tbody = el("tbody");
+    for (const c of corrs.slice(0, 8)) {
+      const tr = el("tr");
+      tr.appendChild(el("td", {}, c.indicator));
+      const catMeta = CATEGORY_META[c.category] || { label: c.category, color: "#8b93a7" };
+      tr.appendChild(el("td", {}, el("span", {
+        class: "chip on",
+        style: "background:" + catMeta.color + "33;color:" + catMeta.color + ";cursor:default;font-size:11px",
+      }, catMeta.label)));
+      const corrAbs = Math.abs(c.correlation);
+      const corrColor = corrAbs >= 0.6 ? "var(--err)" : corrAbs >= 0.45 ? "var(--warn)" : "var(--muted)";
+      tr.appendChild(el("td", { style: "color:" + corrColor + ";font-weight:600" }, (c.correlation > 0 ? "+" : "") + c.correlation.toFixed(2)));
+      tr.appendChild(el("td", {}, c.direction));
+      tr.appendChild(el("td", { class: "muted" }, c.description));
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    panel.appendChild(table);
+    main.appendChild(panel);
+  }
+
   const controls = el("div", { class: "controls" },
     s.updated ? el("span", { class: "status" }, "updated " + relativeTime(s.updated)) : null);
   main.appendChild(controls);
@@ -944,6 +994,99 @@ function renderWatch() {
     grid.appendChild(card);
   }
   main.appendChild(grid);
+}
+
+// ---------------------------------------------------------------------------
+// Health tab
+// ---------------------------------------------------------------------------
+
+async function loadHealth() {
+  try {
+    const [a, b] = await Promise.all([
+      api("/api/events?category=health&limit=120"),
+      api("/api/sentiment/history?hours=24"),
+    ]);
+    state.health.events = a.events;
+    state.health.sentimentHistory = b.history || [];
+    state.health.updated = Date.now();
+    renderHealth();
+  } catch (e) {}
+}
+
+function renderHealth() {
+  if (state.tab !== "health") return;
+  const h = state.health;
+  const main = $("#main");
+  main.innerHTML = "";
+
+  // KPI row
+  const whoEvents = h.events.filter((e) => e.source === "who-don");
+  const withGeo = h.events.filter((e) => e.geo);
+  const highSev = h.events.filter((e) => e.severity >= 3);
+  const cards = el("div", { class: "stat-cards" },
+    el("div", { class: "stat-card" }, el("div", { class: "n" }, String(h.events.length)), el("div", { class: "l" }, "Health events")),
+    el("div", { class: "stat-card" }, el("div", { class: "n" }, String(whoEvents.length)), el("div", { class: "l" }, "WHO outbreaks")),
+    el("div", { class: "stat-card" }, el("div", { class: "n" }, String(highSev.length)), el("div", { class: "l" }, "High severity")),
+    el("div", { class: "stat-card" }, el("div", { class: "n" }, String(withGeo.length)), el("div", { class: "l" }, "On map")));
+  main.appendChild(cards);
+
+  // Health sentiment panel
+  const sentiment = h.events.length ? (function() {
+    let neg = 0, pos = 0, neu = 0;
+    for (const e of h.events) {
+      const text = (e.title || "") + " " + (e.summary || "");
+      const lower = text.toLowerCase();
+      const hasNeg = ["outbreak", "death", "deaths", "fatal", "epidemic", "pandemic", "emergency", "kill"].some((w) => lower.includes(w));
+      const hasPos = ["contained", "recovered", "rescue", "vaccine", "aid", "control"].some((w) => lower.includes(w));
+      if (hasNeg) neg++; else if (hasPos) pos++; else neu++;
+    }
+    const total = h.events.length || 1;
+    return { negative: neg, positive: pos, neutral: neu, total: h.events.length };
+  })() : null;
+
+  if (sentiment && sentiment.total) {
+    const panel = el("div", { class: "panel", style: "margin-bottom:14px" });
+    panel.appendChild(el("div", { class: "meta" },
+      el("span", { class: "cat", style: "background:#36cfc922;color:#36cfc9" }, "Health Sentiment"),
+      el("span", { class: "src" }, sentiment.total + " events")));
+    const bar = el("div", { style: "display:flex;height:8px;border-radius:4px;overflow:hidden;background:#222b3d;margin:8px 0" });
+    const t = sentiment.total || 1;
+    bar.appendChild(el("div", { style: "width:" + Math.max(1, (sentiment.positive / t) * 100) + "%;background:var(--ok)" }));
+    bar.appendChild(el("div", { style: "width:" + Math.max(1, (sentiment.neutral / t) * 100) + "%;background:var(--muted)" }));
+    bar.appendChild(el("div", { style: "width:" + Math.max(1, (sentiment.negative / t) * 100) + "%;background:var(--err)" }));
+    panel.appendChild(bar);
+    const labels = el("div", { style: "display:flex;gap:14px;font-size:12px" });
+    labels.appendChild(el("span", { style: "color:var(--ok)" }, "Positive: " + sentiment.positive));
+    labels.appendChild(el("span", { style: "color:var(--muted)" }, "Neutral: " + sentiment.neutral));
+    labels.appendChild(el("span", { style: "color:var(--err)" }, "Negative: " + sentiment.negative));
+    panel.appendChild(labels);
+    main.appendChild(panel);
+  }
+
+  // Sentiment trend sparkline
+  const hist = h.sentimentHistory || [];
+  if (hist.length >= 2) {
+    const panel = el("div", { class: "panel", style: "margin-bottom:14px" });
+    panel.appendChild(el("div", { class: "meta" },
+      el("span", { class: "cat", style: "background:#36cfc922;color:#36cfc9" }, "Health Sentiment Trend")));
+    const sp = sparkline(hist.map((x) => ({ value: (x.score + 1) / 2 })), "#36cfc9");
+    const first = hist[0].score, last = hist[hist.length - 1].score;
+    const trend = last > first + 0.05 ? "worsening" : last < first - 0.05 ? "improving" : "steady";
+    panel.appendChild(el("div", { class: "status", style: "margin-bottom:2px" },
+      "Last " + hist.length + "h — " + trend));
+    panel.appendChild(sp);
+    main.appendChild(panel);
+  }
+
+  const controls = el("div", { class: "controls" },
+    el("span", { class: "status" }, "🦠 WHO Disease Outbreak News + health events"),
+    h.updated ? el("span", { class: "status" }, "updated " + relativeTime(h.updated)) : null);
+  main.appendChild(controls);
+  main.appendChild(feedCards(h.events));
+  if (!h.events.length) {
+    main.appendChild(el("div", { class: "empty" },
+      "No health events right now. WHO outbreaks and health alerts appear here as they're collected."));
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1035,6 +1178,71 @@ function renderStressPanel() {
       el("div", { class: "status", style: "margin-bottom:2px" }, "Last " + s.history.length + "h trend — " + trend),
       sp));
   }
+  return panel;
+}
+
+function renderSentimentPanel() {
+  const b = state.briefing;
+  // Sentiment comes from the briefing or summary response.
+  const sentiment = (b.briefing && b.briefing.sentiment) || (b.summary && b.summary.sentiment);
+  if (!sentiment || !sentiment.total) return null;
+
+  const LABEL_COLOR = { positive: "var(--ok)", negative: "var(--err)", neutral: "var(--muted)" };
+  const color = LABEL_COLOR[sentiment.label] || "var(--muted)";
+  const panel = el("div", { class: "panel", style: "margin-bottom:14px" });
+  panel.appendChild(el("div", { class: "meta" },
+    el("span", { class: "cat", style: "background:" + color + "22;color:" + color }, "Overall Sentiment"),
+    el("span", { class: "src" }, sentiment.total + " events analyzed")));
+
+  const row = el("div", { style: "display:flex;align-items:center;gap:20px;margin-top:10px;flex-wrap:wrap" });
+
+  // Big score number
+  const big = el("div", { style: "text-align:center;min-width:100px" });
+  const scoreVal = sentiment.average;
+  const scoreText = scoreVal > 0 ? "+" + scoreVal.toFixed(2) : scoreVal.toFixed(2);
+  big.appendChild(el("div", { style: "font-size:36px;font-weight:700;line-height:1;color:" + color }, scoreText));
+  big.appendChild(el("div", { class: "status", style: "text-transform:capitalize;color:" + color }, sentiment.label));
+  row.appendChild(big);
+
+  // Bar breakdown
+  const barWrap = el("div", { style: "flex:1;min-width:200px" });
+  const total = sentiment.total || 1;
+  const segments = [
+    { label: "Positive", count: sentiment.positive_count, color: "var(--ok)" },
+    { label: "Neutral", count: sentiment.neutral_count, color: "var(--muted)" },
+    { label: "Negative", count: sentiment.negative_count, color: "var(--err)" },
+  ];
+  // Stacked bar
+  const bar = el("div", { style: "display:flex;height:10px;border-radius:5px;overflow:hidden;background:#222b3d;margin-bottom:8px" });
+  for (const seg of segments) {
+    const pct = Math.max(1, (seg.count / total) * 100);
+    bar.appendChild(el("div", { style: "width:" + pct + "%;background:" + seg.color }));
+  }
+  barWrap.appendChild(bar);
+  // Labels
+  const labels = el("div", { style: "display:flex;gap:14px;flex-wrap:wrap" });
+  for (const seg of segments) {
+    labels.appendChild(el("span", { style: "font-size:12px;color:" + seg.color },
+      seg.label + ": " + seg.count + " (" + Math.round((seg.count / total) * 100) + "%)"));
+  }
+  barWrap.appendChild(labels);
+  row.appendChild(barWrap);
+
+  panel.appendChild(row);
+
+  // Sentiment trend sparkline
+  const hist = (b.sentimentHistory && b.sentimentHistory.history) || [];
+  if (hist.length >= 2) {
+    const sp = sparkline(hist.map((h) => ({ value: (h.score + 1) / 2 })), color);
+    const first = hist[0].score, last = hist[hist.length - 1].score;
+    const trend = last > first + 0.05 ? "improving" : last < first - 0.05 ? "worsening" : "steady";
+    panel.appendChild(el("div", { style: "margin-top:10px" },
+      el("div", { class: "status", style: "margin-bottom:2px" },
+        "Last " + hist.length + "h trend — " + trend +
+        (last > 0 ? " (more positive)" : last < 0 ? " (more negative)" : " (neutral)")),
+      sp));
+  }
+
   return panel;
 }
 
@@ -1203,6 +1411,135 @@ function renderWatchlistPanel() {
 }
 
 // ---------------------------------------------------------------------------
+// Webhook settings panel (Briefing tab)
+// ---------------------------------------------------------------------------
+
+async function loadWebhookConfig() {
+  try {
+    state.webhook = await api("/api/webhook");
+  } catch (e) {
+    state.webhook = { url: "", enabled: false, categories: [], min_severity: 4 };
+  }
+}
+
+function renderWebhookPanel() {
+  const wh = state.webhook;
+  if (!wh) return null;
+  const panel = el("div", { class: "panel", style: "margin-bottom:14px" });
+  panel.appendChild(el("div", { class: "meta" },
+    el("span", { class: "cat", style: "background:#b37feb22;color:#b37feb" }, "Webhook Notifications"),
+    el("span", { class: "src" }, "Slack / Discord / any incoming webhook")));
+
+  // URL input
+  const urlRow = el("div", { style: "display:flex;gap:8px;margin-top:10px;align-items:center" });
+  const urlInput = el("input", {
+    placeholder: "https://hooks.slack.com/services/... or Discord webhook URL",
+    style: "flex:1;background:var(--panel);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;outline:none",
+  });
+  urlInput.value = wh.url || "";
+  urlRow.appendChild(urlInput);
+  panel.appendChild(urlRow);
+
+  // Options row
+  const optRow = el("div", { style: "display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center" });
+
+  // Enable toggle
+  const toggleBtn = el("button", {
+    class: "chip" + (wh.enabled ? " on" : ""),
+    style: wh.enabled ? "background:#40c057" : "",
+  }, wh.enabled ? "✓ Enabled" : "Disabled");
+  toggleBtn.addEventListener("click", () => { wh.enabled = !wh.enabled; renderWebhookPanel(); });
+  optRow.appendChild(toggleBtn);
+
+  // Min severity
+  optRow.appendChild(el("span", { class: "status" }, "Min severity:"));
+  for (const s of [3, 4, 5]) {
+    const btn = el("button", {
+      class: "chip" + (wh.min_severity === s ? " on" : ""),
+      style: wh.min_severity === s ? "background:#b37feb" : "",
+    }, s + "+");
+    btn.addEventListener("click", () => { wh.min_severity = s; renderWebhookPanel(); });
+    optRow.appendChild(btn);
+  }
+
+  // Category filter chips
+  const allCats = ["conflict", "disaster", "weather", "markets", "energy", "tech", "supplychain", "health"];
+  const catToggle = el("span", { class: "status", style: "margin-left:8px" }, "Categories:");
+  optRow.appendChild(catToggle);
+  for (const c of allCats) {
+    const on = wh.categories.length === 0 || wh.categories.includes(c);
+    const btn = el("button", {
+      class: "chip" + (on ? " on" : ""),
+      style: on ? "background:" + (CATEGORY_META[c] ? CATEGORY_META[c].color : "#8b93a7") : "",
+      title: on ? "Click to exclude " + c : "Click to include " + c,
+    }, CATEGORY_META[c] ? CATEGORY_META[c].label : c);
+    btn.addEventListener("click", () => {
+      if (wh.categories.length === 0) {
+        // First click: set to all except this one
+        wh.categories = allCats.filter((x) => x !== c);
+      } else if (wh.categories.includes(c)) {
+        wh.categories = wh.categories.filter((x) => x !== c);
+      } else {
+        wh.categories.push(c);
+      }
+      renderWebhookPanel();
+    });
+    optRow.appendChild(btn);
+  }
+  panel.appendChild(optRow);
+
+  // Save button
+  const saveRow = el("div", { style: "display:flex;gap:8px;margin-top:8px;align-items:center" });
+  const saveBtn = el("button", { class: "chip", style: "color:#fff;background:#40c057" }, "Save webhook");
+  let savedMsg = null;
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.textContent = "Saving…";
+    try {
+      await apiPut("/api/webhook", {
+        url: urlInput.value.trim(),
+        enabled: wh.enabled,
+        categories: wh.categories,
+        min_severity: wh.min_severity,
+      });
+      savedMsg = el("span", { class: "status" }, "✓ saved — alerts will forward to your webhook");
+    } catch (e) {
+      savedMsg = el("span", { class: "status err" }, "✗ save failed");
+    }
+    saveBtn.textContent = "Save webhook";
+    renderWebhookPanel();
+    if (savedMsg) saveRow.appendChild(savedMsg);
+  });
+  saveRow.appendChild(saveBtn);
+
+  // Test button
+  const testBtn = el("button", { class: "chip" }, "Send test");
+  testBtn.addEventListener("click", async () => {
+    testBtn.textContent = "Sending…";
+    try {
+      await apiPut("/api/webhook", {
+        url: urlInput.value.trim(),
+        enabled: true,
+        categories: wh.categories,
+        min_severity: wh.min_severity,
+      });
+      // Send a test event
+      const testEvt = { severity: 4, category: "news", title: "🔔 Webhook test — World Intelligence is connected!", source: "test" };
+      const payload = JSON.stringify({ text: "🔔 **[NEWS]** Webhook test — World Intelligence is connected!",
+                                       content: "🔔 **[NEWS]** Webhook test — World Intelligence is connected!" });
+      await apiPut("/api/webhook", { enabled: wh.enabled });
+      testBtn.textContent = "✓ sent";
+    } catch (e) {
+      testBtn.textContent = "✗ failed";
+    }
+    setTimeout(() => { testBtn.textContent = "Send test"; }, 2000);
+  });
+  saveRow.appendChild(testBtn);
+  panel.appendChild(saveRow);
+
+  return panel;
+}
+
+// ---------------------------------------------------------------------------
 // Browser alerts for major events
 // ---------------------------------------------------------------------------
 
@@ -1251,6 +1588,378 @@ function scanForAlerts(events) {
     if (list.length > 300) n.seenIds = new Set(list.slice(-300));
     localStorage.setItem("wiSeen", JSON.stringify([...n.seenIds]));
   }
+}
+
+// ---------------------------------------------------------------------------
+// Settings tab
+// ---------------------------------------------------------------------------
+
+async function loadSettings() {
+  try {
+    const [wh, em, wl, hl] = await Promise.all([
+      api("/api/webhook"),
+      api("/api/email"),
+      api("/api/watchlist"),
+      api("/api/health"),
+    ]);
+    state.settings.webhook = wh;
+    state.settings.email = em;
+    state.settings.watchlist = wl;
+    state.settings.health = hl;
+    state.settings.updated = Date.now();
+    renderSettings();
+  } catch (e) {}
+}
+
+function renderSettings() {
+  if (state.tab !== "settings") return;
+  const s = state.settings;
+  const main = $("#main");
+  main.innerHTML = "";
+
+  main.appendChild(el("div", { class: "controls" },
+    el("span", { class: "status" }, "System configuration — all settings stored locally in the database"),
+    s.updated ? el("span", { class: "status" }, "loaded " + relativeTime(s.updated)) : null));
+
+  // ---- System info ----
+  const sysPanel = el("div", { class: "panel", style: "margin-bottom:14px" });
+  sysPanel.appendChild(el("div", { class: "meta" },
+    el("span", { class: "cat", style: "background:#4f8cff22;color:#4f8cff" }, "System")));
+  if (s.health) {
+    const info = el("div", { style: "display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:8px" });
+    const item = (label, val) => {
+      const box = el("div", { style: "background:var(--panel-2);border-radius:6px;padding:8px 10px" });
+      box.appendChild(el("div", { style: "color:var(--muted);font-size:11px;text-transform:uppercase" }, label));
+      box.appendChild(el("div", { style: "font-size:15px;font-weight:600;margin-top:2px" }, String(val)));
+      return box;
+    };
+    info.appendChild(item("Version", s.health.version || "—"));
+    info.appendChild(item("Uptime", s.health.uptimeSec ? Math.floor(s.health.uptimeSec / 60) + " min" : "—"));
+    info.appendChild(item("Events", s.health.total ? s.health.total.toLocaleString() : "—"));
+    const srcs = s.health.sources || {};
+    info.appendChild(item("Sources", (srcs.healthy || 0) + "/" + (srcs.total || 0) + " healthy"));
+    info.appendChild(item("DB size", s.health.dbSizeBytes ? (s.health.dbSizeBytes / 1024 / 1024).toFixed(1) + " MB" : "—"));
+    sysPanel.appendChild(info);
+  }
+  main.appendChild(sysPanel);
+
+  // ---- Webhook settings ----
+  main.appendChild(renderSettingsWebhook());
+
+  // ---- Email digest settings ----
+  main.appendChild(renderSettingsEmail());
+
+  // ---- Watchlist summary ----
+  main.appendChild(renderSettingsWatchlist());
+
+  // ---- Data sources ----
+  main.appendChild(renderSettingsSources());
+
+  // ---- Export / Import ----
+  main.appendChild(renderSettingsExportImport());
+}
+
+function renderSettingsWebhook() {
+  const wh = state.settings.webhook || {};
+  const panel = el("div", { class: "panel", style: "margin-bottom:14px" });
+  panel.appendChild(el("div", { class: "meta" },
+    el("span", { class: "cat", style: "background:#b37feb22;color:#b37feb" }, "Webhook Notifications"),
+    el("span", { class: "src" }, "Slack / Discord / any incoming webhook")));
+
+  const form = el("div", { style: "margin-top:10px" });
+
+  // URL
+  const urlInput = el("input", {
+    placeholder: "https://hooks.slack.com/services/... or Discord webhook URL",
+    style: "width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;outline:none;margin-bottom:8px",
+  });
+  urlInput.value = wh.url || "";
+  form.appendChild(urlInput);
+
+  // Controls row
+  const row = el("div", { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center" });
+
+  const toggleBtn = el("button", {
+    class: "chip" + (wh.enabled ? " on" : ""),
+    style: wh.enabled ? "background:#40c057" : "",
+  }, wh.enabled ? "✓ Enabled" : "Disabled");
+  toggleBtn.addEventListener("click", async () => {
+    wh.enabled = !wh.enabled;
+    await apiPut("/api/webhook", { enabled: wh.enabled });
+    renderSettings();
+  });
+  row.appendChild(toggleBtn);
+
+  row.appendChild(el("span", { class: "status" }, "Min severity:"));
+  for (const sv of [3, 4, 5]) {
+    const btn = el("button", {
+      class: "chip" + (wh.min_severity === sv ? " on" : ""),
+      style: wh.min_severity === sv ? "background:#b37feb" : "",
+    }, sv + "+");
+    btn.addEventListener("click", async () => {
+      wh.min_severity = sv;
+      await apiPut("/api/webhook", { min_severity: sv });
+      renderSettings();
+    });
+    row.appendChild(btn);
+  }
+
+  const saveBtn = el("button", { class: "chip", style: "color:#fff;background:#40c057" }, "Save");
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.textContent = "Saving…";
+    await apiPut("/api/webhook", {
+      url: urlInput.value.trim(),
+      enabled: wh.enabled,
+      min_severity: wh.min_severity,
+    });
+    saveBtn.textContent = "✓ Saved";
+    setTimeout(() => { saveBtn.textContent = "Save"; }, 1500);
+  });
+  row.appendChild(saveBtn);
+
+  form.appendChild(row);
+  panel.appendChild(form);
+  return panel;
+}
+
+function renderSettingsEmail() {
+  const em = state.settings.email || {};
+  const panel = el("div", { class: "panel", style: "margin-bottom:14px" });
+  panel.appendChild(el("div", { class: "meta" },
+    el("span", { class: "cat", style: "background:#faad1422;color:#faad14" }, "Email Digest"),
+    el("span", { class: "src" }, "Daily AI briefing via email (SMTP or Resend)")));
+
+  const form = el("div", { style: "margin-top:10px" });
+
+  // Email input
+  const toInput = el("input", {
+    placeholder: "recipient@example.com",
+    style: "width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;outline:none;margin-bottom:8px",
+  });
+  toInput.value = em.to || "";
+  form.appendChild(toInput);
+
+  // Method selector
+  const row = el("div", { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px" });
+  const methodLabel = el("span", { class: "status" }, "Method:");
+  row.appendChild(methodLabel);
+  for (const m of ["resend", "smtp"]) {
+    const btn = el("button", {
+      class: "chip" + ((em.method || "resend") === m ? " on" : ""),
+      style: (em.method || "resend") === m ? "background:#faad14" : "",
+    }, m === "resend" ? "Resend (free)" : "SMTP");
+    btn.addEventListener("click", async () => {
+      em.method = m;
+      await apiPut("/api/email", { method: m });
+      renderSettings();
+    });
+    row.appendChild(btn);
+  }
+
+  const toggleBtn = el("button", {
+    class: "chip" + (em.enabled ? " on" : ""),
+    style: em.enabled ? "background:#40c057" : "",
+  }, em.enabled ? "✓ Enabled" : "Disabled");
+  toggleBtn.addEventListener("click", async () => {
+    em.enabled = !em.enabled;
+    await apiPut("/api/email", { enabled: em.enabled });
+    renderSettings();
+  });
+  row.appendChild(toggleBtn);
+  form.appendChild(row);
+
+  // Method-specific fields
+  if ((em.method || "resend") === "smtp") {
+    const smtpFields = el("div", { style: "display:grid;grid-template-columns:1fr 80px;gap:6px;margin-bottom:8px" });
+    const hostInput = el("input", {
+      placeholder: "smtp.gmail.com",
+      style: "background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;outline:none",
+    });
+    hostInput.value = em.smtp_host || "";
+    smtpFields.appendChild(hostInput);
+    const portInput = el("input", {
+      placeholder: "587",
+      style: "background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;outline:none",
+    });
+    portInput.value = String(em.smtp_port || 587);
+    smtpFields.appendChild(portInput);
+    form.appendChild(smtpFields);
+    const credFields = el("div", { style: "display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px" });
+    const userInput = el("input", {
+      placeholder: "SMTP username",
+      style: "background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;outline:none",
+    });
+    userInput.value = em.smtp_user || "";
+    credFields.appendChild(userInput);
+    const passInput = el("input", {
+      placeholder: "SMTP password",
+      type: "password",
+      style: "background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;outline:none",
+    });
+    passInput.value = em.smtp_pass || "";
+    credFields.appendChild(passInput);
+    form.appendChild(credFields);
+  } else {
+    const keyInput = el("input", {
+      placeholder: "Resend API key (re_...)",
+      type: "password",
+      style: "width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;outline:none;margin-bottom:8px",
+    });
+    keyInput.value = em.resend_key || "";
+    form.appendChild(keyInput);
+  }
+
+  // Save + Test
+  const actRow = el("div", { style: "display:flex;gap:8px;margin-top:4px" });
+  const saveBtn = el("button", { class: "chip", style: "color:#fff;background:#40c057" }, "Save");
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.textContent = "Saving…";
+    const cfg = {
+      to: toInput.value.trim(),
+      enabled: em.enabled,
+      method: em.method || "resend",
+    };
+    if ((em.method || "resend") === "smtp") {
+      cfg.smtp_host = form.querySelector("input[placeholder*=smtp]")?.value || "";
+      cfg.smtp_port = parseInt(form.querySelectorAll("input")[2]?.value || "587", 10);
+    } else {
+      cfg.resend_key = form.querySelector("input[type=password]")?.value || "";
+    }
+    await apiPut("/api/email", cfg);
+    saveBtn.textContent = "✓ Saved";
+    setTimeout(() => { saveBtn.textContent = "Save"; }, 1500);
+  });
+  actRow.appendChild(saveBtn);
+
+  const testBtn = el("button", { class: "chip" }, "Send test digest");
+  testBtn.addEventListener("click", async () => {
+    testBtn.textContent = "Sending…";
+    try {
+      const r = await api("/api/email/test", { method: "POST" });
+      testBtn.textContent = r.ok ? "✓ Sent" : "✗ Failed";
+    } catch (e) {
+      testBtn.textContent = "✗ Failed";
+    }
+    setTimeout(() => { testBtn.textContent = "Send test digest"; }, 2000);
+  });
+  actRow.appendChild(testBtn);
+  form.appendChild(actRow);
+
+  panel.appendChild(form);
+  return panel;
+}
+
+function renderSettingsWatchlist() {
+  const wl = state.settings.watchlist || {};
+  const panel = el("div", { class: "panel", style: "margin-bottom:14px" });
+  panel.appendChild(el("div", { class: "meta" },
+    el("span", { class: "cat", style: "background:#ff7a4522;color:#ff7a45" }, "Watchlist"),
+    el("span", { class: "src" }, "Countries and keywords that drive AI alerts")));
+  const summary = el("div", { style: "margin-top:8px;display:flex;gap:12px;flex-wrap:wrap" });
+  const chips = (label, list, color) => {
+    const wrap = el("div");
+    wrap.appendChild(el("span", { class: "status" }, label + ":"));
+    const row = el("div", { style: "display:flex;gap:4px;flex-wrap:wrap;margin-top:4px" });
+    for (const t of (list || [])) {
+      row.appendChild(el("span", {
+        class: "chip on",
+        style: "background:" + color + "33;color:" + color + ";cursor:default;font-size:11px",
+      }, t));
+    }
+    if (!list || !list.length) row.appendChild(el("span", { class: "status" }, "none"));
+    wrap.appendChild(row);
+    return wrap;
+  };
+  summary.appendChild(chips("Countries", wl.countries, "#ff7a45"));
+  summary.appendChild(chips("Keywords", wl.keywords, "#faad14"));
+  summary.appendChild(el("div", {}, el("span", { class: "status" }, "Min severity: " + (wl.min_severity || 3) + "+")));
+  panel.appendChild(summary);
+  panel.appendChild(el("div", { class: "status", style: "margin-top:6px" },
+    "Edit on the AI Briefing tab → 'Your watchlist'"));
+  return panel;
+}
+
+function renderSettingsSources() {
+  const hl = state.settings.health || {};
+  const sources = hl.sources || [];
+  if (!sources.length) return null;
+  const panel = el("div", { class: "panel", style: "margin-bottom:14px" });
+  panel.appendChild(el("div", { class: "meta" },
+    el("span", { class: "cat", style: "background:#40c05722;color:#40c057" }, "Data Sources"),
+    el("span", { class: "src" }, sources.filter((s) => s.last_ok).length + "/" + sources.length + " healthy")));
+  const table = el("table", { class: "health-table", style: "margin-top:8px" });
+  const thead = el("thead");
+  const trh = el("tr");
+  for (const h of ["Source", "Status", "Last run", "Events"]) trh.appendChild(el("th", {}, h));
+  thead.appendChild(trh);
+  table.appendChild(thead);
+  const tbody = el("tbody");
+  const sorted = sources.slice().sort((a, b) => Number(a.last_ok) - Number(b.last_ok));
+  for (const s of sorted) {
+    const tr = el("tr");
+    tr.appendChild(el("td", {}, s.source));
+    tr.appendChild(el("td", {}, el("span", { class: s.last_ok ? "ok" : "err" }, s.last_ok ? "ok" : "down")));
+    tr.appendChild(el("td", {}, s.last_run ? relativeTime(s.last_run) : "never"));
+    tr.appendChild(el("td", {}, String(s.count || 0)));
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  panel.appendChild(table);
+  return panel;
+}
+
+function renderSettingsExportImport() {
+  const panel = el("div", { class: "panel", style: "margin-bottom:14px" });
+  panel.appendChild(el("div", { class: "meta" },
+    el("span", { class: "cat", style: "background:#4f8cff22;color:#4f8cff" }, "Backup & Restore"),
+    el("span", { class: "src" }, "Export or import all settings as JSON")));
+
+  const row = el("div", { style: "display:flex;gap:8px;margin-top:10px;flex-wrap:wrap" });
+
+  // Export button
+  const exportBtn = el("button", { class: "chip", style: "color:#fff;background:#4f8cff" }, "📥 Export config");
+  exportBtn.addEventListener("click", async () => {
+    try {
+      const cfg = await api("/api/config/export");
+      const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "world-intel-config.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      exportBtn.textContent = "✓ Exported";
+    } catch (e) {
+      exportBtn.textContent = "✗ Failed";
+    }
+    setTimeout(() => { exportBtn.textContent = "📥 Export config"; }, 2000);
+  });
+  row.appendChild(exportBtn);
+
+  // Import button
+  const importBtn = el("button", { class: "chip" }, "📤 Import config");
+  const fileInput = el("input", { type: "file", accept: ".json", style: "display:none" });
+  fileInput.addEventListener("change", async (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const cfg = JSON.parse(text);
+      importBtn.textContent = "Importing…";
+      const r = await apiPut("/api/config/import", cfg);
+      importBtn.textContent = "✓ Imported " + (r.imported || []).join(", ");
+      loadSettings(); // refresh
+    } catch (e) {
+      importBtn.textContent = "✗ Invalid JSON";
+    }
+    setTimeout(() => { importBtn.textContent = "📤 Import config"; }, 2500);
+  });
+  importBtn.addEventListener("click", () => fileInput.click());
+  row.appendChild(importBtn);
+  row.appendChild(fileInput);
+
+  panel.appendChild(row);
+  return panel;
 }
 
 // ---------------------------------------------------------------------------

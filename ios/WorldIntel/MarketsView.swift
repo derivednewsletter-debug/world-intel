@@ -108,7 +108,8 @@ struct MarketsView: View {
         .navigationTitle("Markets")
         .task { await model.load() }
         .refreshable { await model.refreshNow() }
-        .onReceive(NotificationCenter.default.publisher(for: .dataTick)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .dataTick)) { note in
+            guard note.object as? String == "markets" else { return }
             Task { await model.refreshNow() }
         }
     }

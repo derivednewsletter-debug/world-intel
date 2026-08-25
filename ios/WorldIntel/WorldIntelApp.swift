@@ -66,6 +66,21 @@ struct RootView: View {
 
     enum Tab: Hashable {
         case briefing, live, map, disasters, supplyChain, markets, watch, search, settings
+
+        /// Stable identifier used to target 30s refresh ticks at the visible tab only.
+        var tickID: String {
+            switch self {
+            case .briefing: return "briefing"
+            case .live: return "live"
+            case .map: return "map"
+            case .disasters: return "disasters"
+            case .supplyChain: return "supply"
+            case .markets: return "markets"
+            case .watch: return "watch"
+            case .search: return "search"
+            case .settings: return "settings"
+            }
+        }
     }
 
     var body: some View {
@@ -108,9 +123,10 @@ struct RootView: View {
         }
         .tint(.appAccent)
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
-            // Foreground loop: everything refreshes every 30s while the app is open.
+            // Foreground loop: only the visible tab refreshes every 30s —
+            // hidden tabs don't compete for network, so loads stay fast.
             guard scenePhase == .active else { return }
-            NotificationCenter.default.post(name: .dataTick, object: nil)
+            NotificationCenter.default.post(name: .dataTick, object: tab.tickID)
         }
     }
 }

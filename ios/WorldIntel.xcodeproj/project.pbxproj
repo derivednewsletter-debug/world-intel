@@ -26,6 +26,7 @@
 		A1B2C3D60000000000000011 /* BriefingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000011 /* BriefingView.swift */; };
 		A1B2C3D60000000000000012 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000012 /* NotificationManager.swift */; };
 		A1B2C3D60000000000000013 /* BackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000013 /* BackgroundRefresh.swift */; };
+		A1B2C3D60000000000000015 /* Geocode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000015 /* Geocode.swift */; };
 		B1C2D3E40000000000000001 /* WorldIntelWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E50000000000000001 /* WorldIntelWidget.swift */; };
 		B1C2D3E40000000000000002 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000002 /* Models.swift */; };
 		B1C2D3E40000000000000003 /* RSSParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D50000000000000004 /* RSSParser.swift */; };
@@ -76,6 +77,7 @@
 		A1B2C3D50000000000000011 /* BriefingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingView.swift; sourceTree = "<group>"; };
 		A1B2C3D50000000000000012 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		A1B2C3D50000000000000013 /* BackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundRefresh.swift; sourceTree = "<group>"; };
+		A1B2C3D50000000000000015 /* Geocode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Geocode.swift; sourceTree = "<group>"; };
 		A1B2C3D50000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1B2C3D40000000000000005 /* WorldIntel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WorldIntel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1C2D3E50000000000000001 /* WorldIntelWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldIntelWidget.swift; sourceTree = "<group>"; };
@@ -141,6 +143,7 @@
 				A1B2C3D50000000000000011 /* BriefingView.swift */,
 				A1B2C3D50000000000000012 /* NotificationManager.swift */,
 				A1B2C3D50000000000000013 /* BackgroundRefresh.swift */,
+				A1B2C3D50000000000000015 /* Geocode.swift */,
 				A1B2C3D50000000000000014 /* Info.plist */,
 			);
 			path = WorldIntel;
@@ -272,6 +275,7 @@
 				A1B2C3D60000000000000011 /* BriefingView.swift in Sources */,
 				A1B2C3D60000000000000012 /* NotificationManager.swift in Sources */,
 				A1B2C3D60000000000000013 /* BackgroundRefresh.swift in Sources */,
+				A1B2C3D60000000000000015 /* Geocode.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -360,6 +364,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = PU54V7SU2Y;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -378,6 +383,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = PU54V7SU2Y;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -397,6 +403,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = PU54V7SU2Y;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = WorldIntelWidget/Info.plist;
@@ -420,6 +427,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = PU54V7SU2Y;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = WorldIntelWidget/Info.plist;

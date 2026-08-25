@@ -84,7 +84,7 @@ func clusterEvents(_ events: [WorldEvent]) -> [StoryCluster] {
     }
     return clusters.compactMap { c in
         guard let rep = c.events.max(by: { ($0.severity, $0.published) < ($1.severity, $1.published) }) else { return nil }
-        let now = Date().timeIntervalSince1970 * 1000
+        let now = Int(Date().timeIntervalSince1970 * 1000)
         let lastHour = c.events.filter { $0.published > now - 3_600_000 }.count
         return StoryCluster(
             id: rep.id,
@@ -94,7 +94,7 @@ func clusterEvents(_ events: [WorldEvent]) -> [StoryCluster] {
             count: c.events.count,
             sources: Array(Set(c.events.map(\.source))),
             categories: Array(Set(c.events.map(\.category))),
-            lastSeen: c.events.map(\.published).max() ?? 0,
+            lastSeen: Double(c.events.map(\.published).max() ?? 0),
             momentum: c.events.isEmpty ? 0 : Double(lastHour) / Double(c.events.count)
         )
     }
@@ -112,10 +112,10 @@ struct Spike: Identifiable {
 func detectSpikes(_ events: [WorldEvent], windowCount: Int = 4) -> [Spike] {
     guard events.count >= 8, let newest = events.map(\.published).max(), let oldest = events.map(\.published).min() else { return [] }
     let span = max(newest - oldest, 1)
-    let winMs = span / Double(windowCount)
+    let winMs = Double(span) / Double(windowCount)
     var buckets: [[String: Int]] = Array(repeating: [:], count: windowCount)
     for e in events {
-        let idx = min(windowCount - 1, Int((e.published - oldest) / winMs))
+        let idx = min(windowCount - 1, Int(Double(e.published - oldest) / winMs))
         for t in Set(tokenize(e.title)) {
             buckets[idx][t, default: 0] += 1
         }
@@ -178,7 +178,7 @@ struct Briefing {
 }
 
 func generateBriefing(events: [WorldEvent], hours: Double = 24) -> Briefing {
-    let since = Date().timeIntervalSince1970 * 1000 - hours * 3_600_000
+    let since = Int(Date().timeIntervalSince1970 * 1000 - hours * 3_600_000)
     let recent = events.filter { $0.published >= since }
     let clusters = clusterEvents(recent).prefix(8).map { $0 }
     let breaking = recent.filter { $0.severity >= 4 }.prefix(6).map { $0 }
@@ -259,7 +259,7 @@ struct WorldSummary {
 }
 
 func generateWorldSummary(events: [WorldEvent], hours: Double = 24) -> WorldSummary {
-    let since = Date().timeIntervalSince1970 * 1000 - hours * 3_600_000
+    let since = Int(Date().timeIntervalSince1970 * 1000 - hours * 3_600_000)
     let recent = events.filter { $0.published >= since }
     let clusters = clusterEvents(recent)
     let spikes = detectSpikes(recent)

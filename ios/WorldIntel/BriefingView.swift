@@ -141,7 +141,8 @@ struct BriefingView: View {
         .onReceive(NotificationCenter.default.publisher(for: .appBecameActive)) { _ in
             Task { await model.load() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .dataTick)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .dataTick)) { note in
+            guard note.object as? String == "briefing" else { return }
             Task { await model.load() }
         }
     }

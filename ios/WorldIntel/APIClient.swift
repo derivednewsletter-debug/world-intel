@@ -8,19 +8,11 @@ actor APIClient {
 
     private let session: URLSession = {
         let cfg = URLSessionConfiguration.ephemeral
-        cfg.timeoutIntervalForRequest = 20
-        cfg.timeoutIntervalForResource = 30
+        cfg.timeoutIntervalForRequest = 12
+        cfg.timeoutIntervalForResource = 25
         cfg.httpAdditionalHeaders = ["User-Agent": "WorldIntel-iOS/1.0 (personal)"]
         return URLSession(configuration: cfg)
     }()
-
-    private func text(_ url: URL) async throws -> String {
-        let (data, resp) = try await session.data(from: url)
-        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-        return String(data: data, encoding: .utf8) ?? ""
-    }
 
     func json(_ url: URL) async throws -> Data {
         let (data, resp) = try await session.data(from: url)
@@ -33,28 +25,37 @@ actor APIClient {
     // MARK: - RSS feeds
 
     func rssEvents(feeds: [(name: String, url: String, category: Category)]) async -> [WorldEvent] {
-        var out: [WorldEvent] = []
-        for feed in feeds {
-            guard let url = URL(string: feed.url) else { continue }
-            if let items = try? RSSParser().parse(data: await text(url)) {
-                for item in items {
-                    guard let title = item.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else { continue }
-                    out.append(WorldEvent(
-                        id: Self.eventId(title: title, url: item.link ?? ""),
-                        source: feed.name,
-                        category: feed.category,
-                        severity: Self.severity(title: title, base: 1),
-                        title: title,
-                        url: item.link,
-                        summary: item.summary,
-                        image: item.image,
-                        published: item.date ?? Date.now.timeIntervalSince1970 * 1000,
-                        geo: item.geo
-                    ))
+        // All feeds fetch in parallel — total wait is the slowest feed, not the sum.
+        let parts = await withTaskGroup(of: [WorldEvent].self) { group in
+            for feed in feeds {
+                guard let url = URL(string: feed.url) else { continue }
+                group.addTask {
+                    guard let data = try? await self.json(url),
+                          let items = try? RSSParser().parse(data: data) else { return [] }
+                    var out: [WorldEvent] = []
+                    for item in items.prefix(50) {
+                        guard let title = item.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else { continue }
+                        out.append(WorldEvent(
+                            id: Self.eventId(title: title, url: item.link ?? ""),
+                            source: feed.name,
+                            category: feed.category,
+                            severity: Self.severity(title: title, base: 1),
+                            title: title,
+                            url: item.link,
+                            summary: item.summary,
+                            image: item.image,
+                            published: item.date.map(Int.init) ?? Int(Date.now.timeIntervalSince1970 * 1000),
+                            geo: item.geo
+                        ))
+                    }
+                    return out.sorted { $0.published > $1.published }
                 }
             }
+            var all: [WorldEvent] = []
+            for await part in group { all.append(contentsOf: part) }
+            return all
         }
-        return out.sorted { $0.published > $1.published }
+        return GeoCoder.attach(SourceFeeds.dedupe(parts)).sorted { $0.published > $1.published }
     }
 
     // MARK: - NASA EONET
@@ -89,7 +90,7 @@ actor APIClient {
                 url: sourceUrl,
                 summary: e["description"] as? String ?? "Active event (NASA EONET)",
                 image: nil,
-                published: Self.isoDate(dateStr) ?? Date.now.timeIntervalSince1970 * 1000,
+                published: Self.isoDate(dateStr) ?? Int(Date.now.timeIntervalSince1970 * 1000),
                 geo: lat.isFinite && lon.isFinite ? Geo(lat: lat, lon: lon, place: title) : nil
             ))
         }
@@ -126,7 +127,7 @@ actor APIClient {
                 url: props["url"] as? String,
                 summary: nil,
                 image: nil,
-                published: (props["time"] as? Double) ?? Date.now.timeIntervalSince1970 * 1000,
+                published: (props["time"] as? Double).map(Int.init) ?? Int(Date.now.timeIntervalSince1970 * 1000),
                 geo: lat.isFinite && lon.isFinite ? Geo(lat: lat, lon: lon, place: place) : nil
             ))
         }
@@ -137,7 +138,7 @@ actor APIClient {
 
     func gdacsEvents() async -> [WorldEvent] {
         guard let url = URL(string: "https://www.gdacs.org/xml/rss.xml"),
-              let items = try? RSSParser().parse(data: await text(url)) else { return [] }
+              let items = try? RSSParser().parse(data: await json(url)) else { return [] }
         var out: [WorldEvent] = []
         for item in items {
             guard let title = item.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else { continue }
@@ -152,7 +153,7 @@ actor APIClient {
                 url: item.link,
                 summary: item.summary,
                 image: nil,
-                published: item.date ?? Date.now.timeIntervalSince1970 * 1000,
+                published: item.date.map(Int.init) ?? Int(Date.now.timeIntervalSince1970 * 1000),
                 geo: item.geo
             ))
         }
@@ -183,7 +184,7 @@ actor APIClient {
                 url: p["url"] as? String,
                 summary: (p["desc"] as? String) ?? "Conflict/event cluster (GDELT)",
                 image: nil,
-                published: Date.now.timeIntervalSince1970 * 1000,
+                published: Int(Date.now.timeIntervalSince1970 * 1000),
                 geo: Geo(lat: lat, lon: lon, place: title)
             ))
         }
@@ -291,6 +292,57 @@ actor APIClient {
         return f.string(from: Date())
     }
 
+    // MARK: - Live tracking (planes + ships)
+
+    /// Fetch live aircraft positions from OpenSky Network (free, no key).
+    /// Returns up to `limit` aircraft, sorted by altitude (highest first).
+    func aircraft(limit: Int = 300) async -> [Aircraft] {
+        guard let url = URL(string: "https://opensky-network.org/api/states/all"),
+              let data = try? await json(url),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = root["states"] as? [[Any]] else { return [] }
+        var out: [Aircraft] = []
+        for row in rows where row.count >= 17 {
+            guard let icao = row[0] as? String,
+                  let lon = row[5] as? Double, let lat = row[6] as? Double,
+                  !lat.isNaN, !lon.isNaN else { continue }
+            let callsign = (row[1] as? String ?? "").trimmingCharacters(in: .whitespaces)
+            let country = row[2] as? String ?? ""
+            let alt = row[7] as? Double ?? 0
+            let vel = row[9] as? Double ?? 0
+            let hdg = row[10] as? Double ?? 0
+            let ground = row[8] as? Bool ?? true
+            out.append(Aircraft(id: icao, callsign: callsign, country: country,
+                                lat: lat, lon: lon, altitude: alt, velocity: vel,
+                                heading: hdg, onGround: ground))
+        }
+        // Prefer airborne aircraft, cap to keep the map smooth.
+        return out.filter { !$0.onGround }.sorted { $0.altitude > $1.altitude }.prefix(limit).map { $0 }
+    }
+
+    /// Fetch live vessel positions from openwaters.io AIS (free, no key, worldwide).
+    func vessels(limit: Int = 300) async -> [Vessel] {
+        guard let url = URL(string: "https://ais.openwaters.io/v1/vessels?bbox=-70,-180,80,180"),
+              let data = try? await json(url),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = root["features"] as? [[String: Any]] else { return [] }
+        var out: [Vessel] = []
+        for f in features {
+            guard let props = f["properties"] as? [String: Any],
+                  let geom = f["geometry"] as? [String: Any],
+                  let coords = geom["coordinates"] as? [Double], coords.count >= 2 else { continue }
+            let lon = coords[0], lat = coords[1]
+            let name = props["vesselName"] as? String ?? props["name"] as? String ?? ""
+            let mmsi = "\(props["mmsi"] as? Int ?? 0)"
+            let sog = props["sog"] as? Double ?? 0
+            let cog = props["cog"] as? Double ?? 0
+            let stype = props["shipType"] as? String ?? props["type"] as? String ?? ""
+            out.append(Vessel(id: mmsi, name: name, lat: lat, lon: lon,
+                              speed: sog, course: cog, shipType: stype))
+        }
+        return out.prefix(limit).map { $0 }
+    }
+
     // MARK: - Helpers
 
     static func eventId(title: String, url: String) -> String {
@@ -317,13 +369,13 @@ actor APIClient {
         return max(0, min(5, s))
     }
 
-    static func isoDate(_ s: String?) -> Double? {
+    static func isoDate(_ s: String?) -> Int? {
         guard let s, s.count >= 10 else { return nil }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = formatter.date(from: s) { return d.timeIntervalSince1970 * 1000 }
+        if let d = formatter.date(from: s) { return Int(d.timeIntervalSince1970 * 1000) }
         formatter.formatOptions = [.withInternetDateTime]
-        if let d = formatter.date(from: s) { return d.timeIntervalSince1970 * 1000 }
+        if let d = formatter.date(from: s) { return Int(d.timeIntervalSince1970 * 1000) }
         return nil
     }
 }

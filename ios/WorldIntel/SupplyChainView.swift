@@ -52,7 +52,8 @@ struct SupplyChainView: View {
         .navigationTitle("Supply Chain")
         .task { await model.load() }
         .refreshable { await model.refreshNow() }
-        .onReceive(NotificationCenter.default.publisher(for: .dataTick)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .dataTick)) { note in
+            guard note.object as? String == "supply" else { return }
             Task { await model.refreshNow() }
         }
     }

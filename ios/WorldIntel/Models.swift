@@ -39,7 +39,7 @@ struct ColorValue: Codable {
     let hex: String
 }
 
-struct Geo: Codable {
+struct Geo: Codable, Hashable {
     let lat: Double
     let lon: Double
     let place: String?
@@ -97,4 +97,28 @@ struct Indicator: Codable, Identifiable {
 struct IndicatorPoint: Codable {
     let date: String
     let value: Double?
+}
+
+/// Live aircraft position from OpenSky Network (free, no key).
+struct Aircraft: Identifiable {
+    let id: String          // icao24
+    let callsign: String
+    let country: String
+    let lat: Double
+    let lon: Double
+    let altitude: Double    // meters
+    let velocity: Double    // m/s
+    let heading: Double     // degrees clockwise from north
+    let onGround: Bool
+}
+
+/// Live vessel position from openwaters.io AIS (free, no key).
+struct Vessel: Identifiable {
+    let id: String          // MMSI
+    let name: String
+    let lat: Double
+    let lon: Double
+    let speed: Double       // knots
+    let course: Double
+    let shipType: String
 }

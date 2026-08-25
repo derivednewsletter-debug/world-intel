@@ -34,6 +34,7 @@ final class RSSParser: NSObject, XMLParserDelegate {
     private var currentItem: RSSItem?
     private var currentElement = ""
     private var currentText = ""
+    private var elementAttributes: [String: String] = [:]
 
     func parse(data: Data) throws -> [RSSItem] {
         items = []
@@ -46,6 +47,7 @@ final class RSSParser: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
         currentElement = elementName
         currentText = ""
+        elementAttributes = attributeDict ?? [:]
         if elementName == "item" || elementName == "entry" {
             currentItem = RSSItem()
         }
@@ -70,7 +72,7 @@ final class RSSParser: NSObject, XMLParserDelegate {
         case "pubDate", "published", "updated", "dc:date": item.pubDate = text
         case "description", "summary", "content:encoded", "content": item.summary = text
         case "media:content", "media:thumbnail", "enclosure":
-            if let url = attributeDict["url"] { item.image = url }
+            if let url = elementAttributes["url"] { item.image = url }
         case "geo:lat", "georss:point":
             if elementName == "geo:lat" {
                 item.geoLat = Double(text)

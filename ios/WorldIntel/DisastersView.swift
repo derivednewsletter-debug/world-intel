@@ -64,6 +64,9 @@ struct DisastersView: View {
         .navigationTitle("Disasters")
         .task { await model.load() }
         .refreshable { await model.refreshNow() }
+        .onReceive(NotificationCenter.default.publisher(for: .appBecameActive)) { _ in
+            Task { await model.refreshNow() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .dataTick)) { note in
             guard note.object as? String == "disasters" else { return }
             Task { await model.refreshNow() }

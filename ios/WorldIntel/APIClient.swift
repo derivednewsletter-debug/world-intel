@@ -295,52 +295,65 @@ actor APIClient {
     // MARK: - Live tracking (planes + ships)
 
     /// Fetch live aircraft positions from OpenSky Network (free, no key).
-    /// Returns up to `limit` aircraft, sorted by altitude (highest first).
-    func aircraft(limit: Int = 300) async -> [Aircraft] {
-        guard let url = URL(string: "https://opensky-network.org/api/states/all"),
-              let data = try? await json(url),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+    /// Fetches only airborne aircraft, capped to keep the map smooth.
+    func aircraft(limit: Int = 200) async -> [Aircraft] {
+        // Fetch with a shorter timeout — the full response is ~5 MB.
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.timeoutIntervalForRequest = 10
+        cfg.timeoutIntervalForResource = 15
+        cfg.httpAdditionalHeaders = ["User-Agent": "WorldIntel-iOS/1.0"]
+        let s = URLSession(configuration: cfg)
+        guard let url = URL(string: "https://opensky-network.org/api/states/all?time=0"),
+              let (data, _) = try? await s.data(from: url) else { return [] }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let rows = root["states"] as? [[Any]] else { return [] }
         var out: [Aircraft] = []
-        for row in rows where row.count >= 17 {
-            guard let icao = row[0] as? String,
-                  let lon = row[5] as? Double, let lat = row[6] as? Double,
-                  !lat.isNaN, !lon.isNaN else { continue }
+        for row in rows where row.count >= 12 {
+            // 0:icao24 1:callsign 2:country 5:lon 6:lat 7:alt 8:onGround 9:vel 10:hdg
+            guard let icao = row[0] as? String else { continue }
+            let lat = row[6] as? Double ?? 0
+            let lon = row[5] as? Double ?? 0
+            guard lat != 0, lon != 0, !lat.isNaN, !lon.isNaN else { continue }
+            let onGround = row[8] as? Bool ?? true
+            guard !onGround else { continue }
             let callsign = (row[1] as? String ?? "").trimmingCharacters(in: .whitespaces)
             let country = row[2] as? String ?? ""
             let alt = row[7] as? Double ?? 0
             let vel = row[9] as? Double ?? 0
             let hdg = row[10] as? Double ?? 0
-            let ground = row[8] as? Bool ?? true
             out.append(Aircraft(id: icao, callsign: callsign, country: country,
                                 lat: lat, lon: lon, altitude: alt, velocity: vel,
-                                heading: hdg, onGround: ground))
+                                heading: hdg, onGround: false))
         }
-        // Prefer airborne aircraft, cap to keep the map smooth.
-        return out.filter { !$0.onGround }.sorted { $0.altitude > $1.altitude }.prefix(limit).map { $0 }
+        return out.sorted { $0.altitude > $1.altitude }.prefix(limit).map { $0 }
     }
 
     /// Fetch live vessel positions from openwaters.io AIS (free, no key, worldwide).
-    func vessels(limit: Int = 300) async -> [Vessel] {
+    func vessels(limit: Int = 200) async -> [Vessel] {
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.timeoutIntervalForRequest = 10
+        cfg.timeoutIntervalForResource = 15
+        let s = URLSession(configuration: cfg)
         guard let url = URL(string: "https://ais.openwaters.io/v1/vessels?bbox=-70,-180,80,180"),
-              let data = try? await json(url),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let (data, _) = try? await s.data(from: url) else { return [] }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let features = root["features"] as? [[String: Any]] else { return [] }
         var out: [Vessel] = []
-        for f in features {
+        for f in features.prefix(limit) {
             guard let props = f["properties"] as? [String: Any],
                   let geom = f["geometry"] as? [String: Any],
                   let coords = geom["coordinates"] as? [Double], coords.count >= 2 else { continue }
             let lon = coords[0], lat = coords[1]
-            let name = props["vesselName"] as? String ?? props["name"] as? String ?? ""
+            guard lat != 0, lon != 0 else { continue }
+            let name = props["name"] as? String ?? ""
             let mmsi = "\(props["mmsi"] as? Int ?? 0)"
             let sog = props["sog"] as? Double ?? 0
             let cog = props["cog"] as? Double ?? 0
-            let stype = props["shipType"] as? String ?? props["type"] as? String ?? ""
+            let stype = "\(props["type"] as? Int ?? 0)"
             out.append(Vessel(id: mmsi, name: name, lat: lat, lon: lon,
                               speed: sog, course: cog, shipType: stype))
         }
-        return out.prefix(limit).map { $0 }
+        return out
     }
 
     // MARK: - Helpers

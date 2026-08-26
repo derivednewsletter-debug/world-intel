@@ -10,6 +10,7 @@ final class MapModel: ObservableObject {
     @Published var showFlights = true
     @Published var showShips = true
     @Published var showEvents = true
+    @Published var legendExpanded = false
 
     func load(force: Bool = false) async {
         await fetch(force: force)
@@ -22,6 +23,7 @@ final class MapModel: ObservableObject {
     func toggleFlights() { showFlights.toggle() }
     func toggleShips() { showShips.toggle() }
     func toggleEvents() { showEvents.toggle() }
+    func toggleLegend() { legendExpanded.toggle() }
 
     private func fetch(force: Bool) async {
         if let base = AppServer.baseURL {
@@ -46,8 +48,8 @@ final class MapModel: ObservableObject {
         async let usgs = APIClient.shared.usgsEvents()
         async let gdacs = APIClient.shared.gdacsEvents()
         async let points = APIClient.shared.gdeltPoints()
-        async let planes = APIClient.shared.aircraft(limit: 250)
-        async let ships = APIClient.shared.vessels(limit: 250)
+        async let planes = APIClient.shared.aircraft(limit: 200)
+        async let ships = APIClient.shared.vessels(limit: 200)
         let (n, e, u, g, p, pl, sh) = await (news, eonet, usgs, gdacs, points, planes, ships)
         let all = [n, e, u, g, p].flatMap { $0 }
         let geoed = GeoCoder.attach(SourceFeeds.dedupe(all)).filter { $0.geo != nil }
@@ -139,23 +141,39 @@ struct MapView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .padding(12)
 
-            // Toggle controls.
+            // Collapsible legend + toggle controls.
             VStack(alignment: .leading, spacing: 6) {
-                ToggleRow(icon: "circle.fill", color: .blue, label: "Events", isOn: $model.showEvents)
-                ToggleRow(icon: "airplane", color: .white, label: "Flights", isOn: $model.showFlights)
-                ToggleRow(icon: "ferry", color: .cyan, label: "Ships", isOn: $model.showShips)
-
-                Divider().background(Color.white.opacity(0.3))
-
-                // Category legend.
-                ForEach(Category.allCases) { c in
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(Color(cv: c.color))
-                            .frame(width: 8, height: 8)
-                        Text(c.label)
+                // Collapse/expand button.
+                Button { model.toggleLegend() } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: model.legendExpanded ? "chevron.down" : "chevron.right")
                             .font(.caption2)
-                            .foregroundColor(.white.opacity(0.7))
+                        Text(model.legendExpanded ? "Hide" : "Layers")
+                            .font(.caption).bold()
+                    }
+                    .foregroundColor(.white)
+                }
+                .buttonStyle(.plain)
+
+                if model.legendExpanded {
+                    Divider().background(Color.white.opacity(0.3))
+
+                    ToggleRow(icon: "circle.fill", color: .blue, label: "Events", isOn: $model.showEvents)
+                    ToggleRow(icon: "airplane", color: .white, label: "Flights", isOn: $model.showFlights)
+                    ToggleRow(icon: "ferry", color: .cyan, label: "Ships", isOn: $model.showShips)
+
+                    Divider().background(Color.white.opacity(0.3))
+
+                    // Category legend.
+                    ForEach(Category.allCases) { c in
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(Color(cv: c.color))
+                                .frame(width: 8, height: 8)
+                            Text(c.label)
+                                .font(.caption2)
+                                .foregroundColor(.white.opacity(0.7))
+                        }
                     }
                 }
             }
@@ -164,12 +182,16 @@ struct MapView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .padding(12)
             .frame(maxHeight: .infinity, alignment: .bottomLeading)
+            .animation(.easeInOut(duration: 0.2), value: model.legendExpanded)
         }
         .background(Color.appBg)
-        .task { await model.load() }
+        .task { await model.load(force: true) }          // force refresh every time view appears
         .refreshable { await model.refreshNow() }
         .onReceive(NotificationCenter.default.publisher(for: .dataTick)) { note in
             guard note.object as? String == "map" else { return }
+            Task { await model.refreshNow() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .appBecameActive)) { _ in
             Task { await model.refreshNow() }
         }
     }

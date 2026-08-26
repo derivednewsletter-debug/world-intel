@@ -68,7 +68,7 @@ struct FeedView: View {
         .task { await model.load() }
         .refreshable { await model.refreshNow() }
         .onReceive(NotificationCenter.default.publisher(for: .appBecameActive)) { _ in
-            Task { await model.load() }
+            Task { await model.refreshNow() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .dataTick)) { note in
             guard note.object as? String == "live" else { return }
